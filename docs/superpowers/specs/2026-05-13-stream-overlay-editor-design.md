@@ -39,7 +39,7 @@ In scope:
 - A chat-command-binding system: trigger pattern → named event published to the overlay event bus.
 - obs-websocket v5 integration: auto-detect, password-challenge auth, browser-source creation, bidirectional scene mapping.
 - Filesystem persistence (Rust server) with versioned schema and migration support; cloud-database persistence designed-for but deferred (see [ADR-0002](../../decisions/0002-local-or-cloud-rust-core-with-qubit-rpc.md)).
-- qubit subscription-based live sync between editor and overlay routes (replaces BroadcastChannel; the Rust server is the single source of truth).
+- Live sync between the editor and overlay routes. **Revised by [ADR-0005](../../decisions/0005-offline-collaborative-loro-crdt-trusted-relay.md):** sync is now an offline-collaborative Loro CRDT replicated to every client and merged by a trusted relay, not qubit subscriptions from a single-source-of-truth server.
 - A Live/Draft mode toggle.
 
 Out of scope (deferred):
@@ -345,6 +345,8 @@ Switching `Scene.themeId` from `'cozy'` to `'cyber'` is one field assignment. Th
 ---
 
 ## 5. The Decider
+
+> **Revised by [ADR-0005](../../decisions/0005-offline-collaborative-loro-crdt-trusted-relay.md):** the workspace document is a Loro CRDT, so there is no `evolve`/event log; `decide` becomes a pure validator/repair function (`validate(workspace) -> Vec<Repair>`) run authoritatively by the trusted relay. The Command/Event catalog below still describes the operations usefully, read `evolve` as Loro's merge and `decide` as the validator.
 
 ### 5.1 Type signature
 
@@ -1145,6 +1147,8 @@ Added with the responsive shell ([ADR-0004](../../decisions/0004-responsive-edit
 
 ## 13. Persistence
 
+> **Revised by [ADR-0005](../../decisions/0005-offline-collaborative-loro-crdt-trusted-relay.md):** persistence is a Loro binary snapshot (`doc.export(snapshot)`) written atomically to the OS app-data dir, not a hand-rolled workspace JSON file. JSON export/import is retained as a user-facing feature. Live sync is Loro's update protocol over WebSocket, not qubit subscriptions from a single authority.
+
 ### 13.1 Storage shape
 
 Workspace state lives in the Rust server process. Persistence is abstracted behind the `Persistence` trait (see §6.3); v1 uses `FilePersistence`, v2 cloud mode uses `DatabasePersistence`. Both implementations serialize the same `Workspace` shape.
@@ -1255,6 +1259,8 @@ Pinned where every contributor will see them, README, CONTRIBUTING, and as ESLin
 ---
 
 ## 16. Implementation stack (locked)
+
+> **Revised by [ADR-0005](../../decisions/0005-offline-collaborative-loro-crdt-trusted-relay.md):** add `loro` (Rust) / `loro-crdt` (JS) as the CRDT document substrate; qubit is retained for the control plane only (not the document data-plane); `@tanstack/svelte-query` is dropped for document state (the local Loro replica is the reactive store). `eslint-plugin-boundaries` is referenced below but is not yet installed.
 
 The architectural decisions in §1–15 are framework-agnostic. This section names the concrete technology stack the v1 implementation is built on. The stack is locked per [ADR-0002](../../decisions/0002-local-or-cloud-rust-core-with-qubit-rpc.md) (local-or-cloud Rust core with qubit RPC) and operates inside the FSD organization from §3.1.
 
