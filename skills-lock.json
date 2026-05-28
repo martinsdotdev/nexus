@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "skills": {
+    "feature-sliced-design": {
+      "source": "feature-sliced/skills",
+      "sourceType": "github",
+      "skillPath": "feature-sliced-design/SKILL.md",
+      "computedHash": "91a0239bc3f198e299e9163f2219eb1538f71ff502e91692a7576bf8ae8570bd"
+    }
+  }
+}

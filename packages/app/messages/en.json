@@ -1,0 +1,6 @@
+{
+	"$schema": "https://inlang.com/schema/inlang-message-format",
+	"app.name": "Nexus",
+	"app.tagline": "Stream overlay editor",
+	"meta.locale_name": "English"
+}
