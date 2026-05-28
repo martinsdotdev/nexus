@@ -1,0 +1,208 @@
+/*
+ * Nexus editor design tokens (alias tier).
+ *
+ * Dark-first: dark is the baseline in :root, the .dark class re-asserts it (so the
+ * documented class mechanism resolves), and .light is the secondary opt-out. The
+ * palette is grounded in Zed's "One Dark" theme, translated to OKLCH at hue 264
+ * with a faint cool chroma so the near-blacks read as graphite, not flat grey.
+ * Structural depth (the elevation ladder, chrome surfaces, panel shadows) draws
+ * from Graphite, Affinity, and DaVinci Resolve. See ADR-0003 and spec section 12.
+ *
+ * This is the EDITOR universe only. Overlay-runtime theme presets (Cozy, Cyber,
+ * Editorial, Sticker) are a separate universe and live in their own files.
+ *
+ * Vocabulary follows shadcn/ui (background, foreground, card, popover, muted,
+ * primary, secondary, accent, border, input, ring) plus ReUI state colors. The
+ * chrome-structure block is additive for the pro-tool shell; no renames.
+ */
+
+/* Non-themed tokens: identical in dark and light. */
+:root {
+	/* Typography */
+	--font-sans: 'Geist', system-ui, sans-serif;
+	--font-serif: 'Instrument Serif', Georgia, serif;
+	--font-mono: 'Geist Mono', 'JetBrains Mono', ui-monospace, monospace;
+
+	--text-xs: 11px;
+	--text-sm: 13px;
+	--text-base: 15px;
+	--text-lg: 18px;
+	/* Display sizes scale fluidly (360px to 1280px viewport); UI sizes stay fixed. */
+	--text-xl: clamp(20px, 0.22vw + 19.2px, 22px);
+	--text-2xl: clamp(24px, 0.43vw + 22.5px, 28px);
+
+	--leading-tight: 1.2;
+	--leading-base: 1.4;
+	--leading-relaxed: 1.55;
+
+	--measure-prose: 64ch;
+	--measure-ui: 36ch;
+
+	/* Spacing (8px base rhythm) */
+	--space-1: 4px;
+	--space-2: 8px;
+	--space-3: 12px;
+	--space-4: 16px;
+	--space-5: 24px;
+	--space-6: 32px;
+	--space-8: 48px;
+
+	/* Radii (derived from a single base) */
+	--radius-none: 0;
+	--radius: 6px;
+	--radius-sm: calc(var(--radius) * 0.6);
+	--radius-md: calc(var(--radius) * 0.8);
+	--radius-lg: var(--radius);
+	--radius-xl: calc(var(--radius) * 1.6);
+	--radius-canvas: 14px;
+	--radius-circular: 9999px;
+
+	/* Stroke widths */
+	--stroke-thin: 1px;
+	--stroke-thick: 1.5px;
+	--stroke-thicker: 2px;
+
+	/* Motion (editor budget: <= 300ms, ease-out default) */
+	--dur-instant: 0ms;
+	--dur-fast: 120ms;
+	--dur-normal: 180ms;
+	--dur-slow: 240ms;
+	--ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+	--ease-in: cubic-bezier(0.7, 0, 0.84, 0);
+	--ease-emphasized: cubic-bezier(0.2, 0, 0, 1);
+	--ease-spring: cubic-bezier(0.5, 1.5, 0.5, 1);
+	--press-scale: 0.97;
+	--enter-scale-from: 0.95;
+
+	/* Chrome layout metrics (theme-independent) */
+	--titlebar-height: 40px;
+	--toolrail-width: 48px;
+	--scenestrip-height: 88px;
+	--panel-header-height: 32px;
+	--panel-min-width: 200px;
+	--panel-default-width: 280px;
+
+	/* Off-canvas drawer width + minimum touch target */
+	--drawer-width: min(320px, 86vw);
+	--touch-target-min: 44px;
+
+	/*
+	 * Responsive breakpoints, documentation only. CSS @media/@container cannot read
+	 * var(), so these literals are mirrored in routes/edit/shell-state.svelte.ts
+	 * (BREAKPOINTS) and hard-coded in every @media/@container condition; this block
+	 * is the canonical human reference, keep the three in sync. Zones: wide >= 1280
+	 * (3-col), medium 960-1279 (right drawer), narrow 640-959 (both drawers),
+	 * best-effort < 640.
+	 */
+	--bp-wide: 1280px;
+	--bp-medium: 960px;
+	--bp-floor: 640px;
+}
+
+/*
+ * Color tokens. Dark is the baseline; .dark re-asserts it explicitly so the
+ * documented class mechanism resolves even if something toggles classes directly.
+ */
+:root,
+.dark {
+	/* Surfaces (elevation ladder: app bg darkest, each surface lifts) */
+	--background: oklch(20% 0.012 264);
+	--foreground: oklch(92% 0.01 264);
+	--card: oklch(23.5% 0.012 264);
+	--card-foreground: oklch(92% 0.01 264);
+	--popover: oklch(27% 0.013 264);
+	--popover-foreground: oklch(93% 0.01 264);
+	--muted: oklch(26% 0.012 264);
+	--muted-foreground: oklch(68% 0.012 264);
+
+	/* Emphasis */
+	--secondary: oklch(28% 0.013 264);
+	--secondary-foreground: oklch(92% 0.01 264);
+	--accent: oklch(31% 0.02 264);
+	--accent-foreground: oklch(95% 0.01 264);
+	--primary: oklch(62% 0.16 255);
+	--primary-foreground: oklch(98% 0 0);
+
+	/* State */
+	--info: oklch(68% 0.14 235);
+	--info-foreground: oklch(16% 0 0);
+	--success: oklch(68% 0.16 150);
+	--success-foreground: oklch(16% 0 0);
+	--warning: oklch(80% 0.16 90);
+	--warning-foreground: oklch(16% 0 0);
+	--destructive: oklch(63% 0.2 28);
+	--destructive-foreground: oklch(98% 0 0);
+
+	/* Affordances */
+	--border: oklch(32% 0.012 264);
+	--border-subtle: oklch(27% 0.012 264);
+	--input: oklch(28% 0.013 264);
+	--ring: oklch(72% 0.13 245);
+
+	/* Inverse (light chip on dark) */
+	--invert: oklch(94% 0.01 264);
+	--invert-foreground: oklch(18% 0.01 264);
+
+	/* Chrome surfaces */
+	--titlebar: oklch(18% 0.012 264);
+	--titlebar-foreground: oklch(86% 0.01 264);
+	--panel-header: oklch(26% 0.012 264);
+	--toolrail: oklch(18.5% 0.012 264);
+	--divider: oklch(15% 0.01 264);
+
+	/* Elevation / depth */
+	--shadow-panel: 0 1px 2px oklch(0% 0 0 / 0.4);
+	--shadow-popover: 0 8px 24px oklch(0% 0 0 / 0.5), 0 2px 6px oklch(0% 0 0 / 0.4);
+	--shadow-dragging: 0 12px 32px oklch(0% 0 0 / 0.55);
+	--focus-ring: 0 0 0 2px var(--background), 0 0 0 4px var(--ring);
+}
+
+/*
+ * Light secondary. Ported from the original spec light palette plus a faint cool
+ * chroma at hue 264 so toggling dark <-> light does not shift temperature.
+ */
+.light {
+	--background: oklch(99% 0.004 264);
+	--foreground: oklch(20% 0.01 264);
+	--card: oklch(97% 0.004 264);
+	--card-foreground: oklch(20% 0.01 264);
+	--popover: oklch(99.5% 0.003 264);
+	--popover-foreground: oklch(20% 0.01 264);
+	--muted: oklch(96% 0.005 264);
+	--muted-foreground: oklch(45% 0.01 264);
+
+	--secondary: oklch(94% 0.006 264);
+	--secondary-foreground: oklch(20% 0.01 264);
+	--accent: oklch(93% 0.01 264);
+	--accent-foreground: oklch(20% 0.01 264);
+	--primary: oklch(55% 0.18 255);
+	--primary-foreground: oklch(99% 0 0);
+
+	--info: oklch(55% 0.16 235);
+	--info-foreground: oklch(99% 0 0);
+	--success: oklch(58% 0.16 150);
+	--success-foreground: oklch(99% 0 0);
+	--warning: oklch(70% 0.16 75);
+	--warning-foreground: oklch(20% 0 0);
+	--destructive: oklch(55% 0.22 28);
+	--destructive-foreground: oklch(99% 0 0);
+
+	--border: oklch(90% 0.006 264);
+	--border-subtle: oklch(94% 0.005 264);
+	--input: oklch(96% 0.005 264);
+	--ring: oklch(55% 0.18 255);
+
+	--invert: oklch(20% 0.01 264);
+	--invert-foreground: oklch(96% 0.005 264);
+
+	--titlebar: oklch(96% 0.005 264);
+	--titlebar-foreground: oklch(30% 0.01 264);
+	--panel-header: oklch(95% 0.005 264);
+	--toolrail: oklch(96.5% 0.005 264);
+	--divider: oklch(88% 0.006 264);
+
+	--shadow-panel: 0 1px 2px oklch(0% 0 0 / 0.08);
+	--shadow-popover: 0 8px 24px oklch(0% 0 0 / 0.12), 0 2px 6px oklch(0% 0 0 / 0.08);
+	--shadow-dragging: 0 12px 32px oklch(0% 0 0 / 0.16);
+	--focus-ring: 0 0 0 2px var(--background), 0 0 0 4px var(--ring);
+}

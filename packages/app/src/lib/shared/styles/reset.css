@@ -1,0 +1,83 @@
+/*
+ * Minimal reset. Hand-rolled (no modern-normalize dependency yet) covering the
+ * cross-browser inconsistencies the editor actually hits. Pairs with tokens.css.
+ */
+
+*,
+*::before,
+*::after {
+	box-sizing: border-box;
+}
+
+html,
+body {
+	margin: 0;
+	padding: 0;
+	height: 100%;
+}
+
+body {
+	font-family: var(--font-sans);
+	font-size: var(--text-base);
+	line-height: var(--leading-base);
+	color: var(--foreground);
+	background: var(--background);
+	-webkit-font-smoothing: antialiased;
+	text-rendering: optimizeLegibility;
+}
+
+h1,
+h2,
+h3,
+h4,
+p,
+figure {
+	margin: 0;
+}
+
+button,
+input,
+select,
+textarea {
+	font: inherit;
+	color: inherit;
+}
+
+button {
+	cursor: pointer;
+	background: none;
+	border: none;
+}
+
+ul,
+ol {
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+
+img,
+svg {
+	display: block;
+	max-width: 100%;
+}
+
+:focus-visible {
+	outline: none;
+	box-shadow: var(--focus-ring);
+}
+
+/*
+ * Honor reduced-motion globally: near-instant transitions and animations (0.01ms,
+ * not 0, so transitionend still fires). Covers the drawer slide and all chrome motion.
+ */
+@media (prefers-reduced-motion: reduce) {
+	*,
+	*::before,
+	*::after {
+		animation-duration: 0.01ms !important;
+		animation-iteration-count: 1 !important;
+		transition-duration: 0.01ms !important;
+		scroll-behavior: auto !important;
+	}
+}

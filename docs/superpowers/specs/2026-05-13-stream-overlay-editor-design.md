@@ -814,13 +814,18 @@ When `ObsConnection.kind === 'disconnected'` after auto-probe failure, the "Use 
 
 ### 11.1 Layout
 
-Three-pane:
+The editor chrome is a dark-first professional-creative-tool shell (see [ADR-0003](../../decisions/0003-dark-first-pro-creative-tool-editor-aesthetic.md)), drawing on Zed, Graphite, Affinity, and DaVinci Resolve. Regions:
 
-- **Left palette (~240px):** widget categories + drag sources.
+- **Title bar (top, full width, ~40px):** app mark, Live/Draft chip, undo/redo, "Use in OBS".
+- **Left tool rail (~48px):** vertical icon rail of tools/modes (Affinity/Graphite convention), distinct from the widget palette.
+- **Dockable studio panels (left and right, default ~280px, collapsible):** Affinity-style "studios". The widget palette is the default left studio; the inspector (selected-widget props from `propSchema`, or scene-level controls when nothing is selected) is the default right studio; the layers list is a studio. Panels collapse to their header and present a drag handle. Full drag-docking and saved custom layouts are a later iteration; the frames are dockable-shaped from the start.
 - **Center canvas:** virtual-pixel surface at `Layout.aspect` (1920×1080 or 1080×1920), CSS-scaled to fit available space with letterboxing. Pannable but the default zoom is "fit to viewport."
-- **Right inspector (~280px):** when a widget is selected, shows that widget's form (from `propSchema`); when nothing is selected, shows scene-level controls (theme picker, accent override, density). Layers list lives within the inspector, collapsible.
+- **Bottom scene strip (~88px):** Resolve-style page cards switching the active scene (Live / Starting Soon / BRB / Ending), the visual home of `composition.scene.activate`. Replaces the earlier top-toolbar scene tabs.
+- **Command palette (overlay):** opens on Cmd/Ctrl-K (the Zed pattern), a keyboard-first fuzzy launcher for editor actions.
 
-Top toolbar (~48px high): layout switcher (left), scene tabs (left-center), Live/Draft toggle (center), test-fire menu + undo/redo + "Use in OBS" (right).
+The four signature patterns map to their inspirations: command palette (Zed), tool rail + dockable studios (Affinity/Graphite), scene strip (DaVinci Resolve pages).
+
+**Implementation note:** §3.1's FSD tree is written in illustrative React `.tsx` vocabulary. The real project is SvelteKit: editor chrome lives under `packages/app/src/routes/edit/` (the page composition) plus `packages/app/src/lib/shared/ui/` (generic primitives: `IconButton`, `StudioPanel`, `CommandPalette`). The `.tsx` paths in §3.1 indicate layer placement, not literal filenames.
 
 ### 11.2 Mode toggle behavior
 
@@ -866,13 +871,31 @@ Archived layouts hide from the dropdown but persist in storage. A "Show archived
 | Duplicate selected widget | `⌘D` / `Ctrl+D` |
 | Nudge selected (1px) | Arrow keys |
 | Nudge selected (10px) | `Shift` + Arrow keys |
-| Deselect | `Esc` |
+| Deselect, or close an open drawer or the command palette | `Esc` |
+| Open command palette | `⌘K` / `Ctrl+K` |
 | Switch scene N (N in 1–9) | Number key `1`–`9` (binds to the Nth scene in display order; no-op past the layout's scene count) |
 | Toggle Live/Draft | `⌘L` / `Ctrl+L` |
 | Open Layout switcher | `⌘O` / `Ctrl+O` |
 | Open Use in OBS modal | `⌘E` / `Ctrl+E` |
 
 All shortcut-driven actions are instant (no animation), per the editor motion budget.
+
+### 11.7 Responsive behavior
+
+The editor is desktop-first but degrades gracefully to a ~640px floor (best-effort to ~360px), per [ADR-0004](../../decisions/0004-responsive-editor-shell.md). Layout reflow is owned entirely by CSS (viewport `@media` for the shell, `@container` for panel internals), so a prerendered page is correct at any width before JavaScript runs; JavaScript adds only the interactive off-canvas drawer open and close.
+
+Four viewport zones:
+
+| Zone | Width | Left widgets panel | Right inspector |
+|---|---|---|---|
+| Wide | >= 1280px | docked | docked |
+| Medium | 960 to 1279px | docked | off-canvas drawer |
+| Narrow | 640 to 959px | off-canvas drawer | off-canvas drawer |
+| Best-effort | < 640px | drawer | drawer (tool rail horizontalizes, canvas full-bleed, scene strip thins) |
+
+The inspector sheds first (it is reference; the widget palette is the working surface). A panel that has gone off-canvas is reached from a title-bar toggle that opens it as a Drawer: slide-in over a scrim, focus-trapped, dismissed by Escape, the scrim, or a close button, with the background made `inert` while open, and only one drawer open at a time. When the viewport widens back to a zone where a panel re-docks, its drawer closes so nothing is orphaned.
+
+Panel internals adapt to the panel's own width via `@container`, independent of the viewport: below 260px the body padding tightens; below 220px the inspector's property rows stack label-over-value. Touch input (coarse pointer) expands tap targets to 44px via transparent overlays so the dense pro-tool visuals are unchanged, and hover affordances are gated behind `@media (hover: hover)`. All motion honors `prefers-reduced-motion`.
 
 ---
 
@@ -884,7 +907,7 @@ Nexus has **two distinct token universes**, both CSS-custom-property-driven but 
 
 | Universe | File location | Used by | Lifecycle |
 |---|---|---|---|
-| **Editor tokens** | `shared/styles/tokens.css` | `ui/editor/`, `ui/landing/` | Single design (light + dark). Linear-band restrained. Never changes per theme. |
+| **Editor tokens** | `shared/styles/tokens.css` | `ui/editor/`, `ui/landing/` | Dark-first, light secondary. Pro-creative-tool aesthetic (Zed/Graphite/Affinity/Resolve) per [ADR-0003](../../decisions/0003-dark-first-pro-creative-tool-editor-aesthetic.md). Never changes per theme. |
 | **Overlay-runtime theme tokens** | `themes/<name>.css` (one per theme) | `ui/overlay/` only | One complete token override per theme (Cozy, Cyber, Editorial, Sticker). Hot-swapped via `[data-theme]` attribute. |
 
 The two universes use the same naming vocabulary (so a widget consuming `--foreground` doesn't care which universe it's running in) but maintain separate values. The editor never adopts a theme's aesthetic; the overlay never falls back to editor tokens. This separation is enforced by directory boundaries and lint rules, `ui/overlay/**` may not import `shared/styles/tokens.css` and vice versa.
@@ -942,31 +965,29 @@ Rules: body 15px / line-height 1.4, max line-length 64ch for prose, curly quotes
 
 If a future contributor wants role-named tokens (e.g., `--text-body-medium` aliased to `--text-base`), nothing prevents adding them, but the size names remain canonical to match the Tailwind/shadcn ecosystem we inherit from.
 
-### 12.2 Color (shadcn/ui vocabulary + ReUI state extensions, OKLCH)
+### 12.2 Color (dark-first, shadcn/ui vocabulary + ReUI state extensions, OKLCH)
 
-The naming follows shadcn/ui (the de facto industry standard) so contributors inherit the existing vocabulary. ReUI's semantic state additions (`info`, `success`, `warning`, `invert`) fill the gap shadcn leaves. Every background variable has a paired `-foreground` variable for accessible contrast, the universal convention across M3 (`on-X`), DaisyUI (`-content`), and shadcn (`-foreground`); we use `-foreground`.
+**Dark-first** per [ADR-0003](../../decisions/0003-dark-first-pro-creative-tool-editor-aesthetic.md): dark values are the baseline in `:root` (re-asserted under `.dark` via the selector group `:root, .dark`), `app.html` ships `class="dark"` so the page paints dark with zero JavaScript, and `.light` is the secondary opt-out. The naming still follows shadcn/ui; ReUI's state additions (`info`, `success`, `warning`, `invert`) fill the gaps; every background has a paired `-foreground`.
 
-**Surface roles** (background containers + their default text):
+The **canonical values** live in `packages/app/src/lib/shared/styles/tokens.css`. The defining change from the prior flat palette is an explicit **elevation ladder**: app background is darkest, each surface lifts above it. The palette is grounded in Zed's One Dark, translated to OKLCH at hue 264 with a faint cool chroma (0.008 to 0.015) so the near-blacks read as graphite rather than flat grey; structural depth draws from Graphite, Affinity, and DaVinci Resolve.
+
+**Surface roles** (dark baseline, the elevation ladder):
 
 ```css
-:root {
-  /* Base surface, the app shell */
-  --background:                  oklch(99% 0 0);
-  --foreground:                  oklch(18% 0 0);
-
-  /* Elevated surface, panels, cards, the canvas frame */
-  --card:                        oklch(97% 0 0);
-  --card-foreground:             oklch(18% 0 0);
-
-  /* Floating surface, popovers, dropdowns, tooltips */
-  --popover:                     oklch(98% 0 0);
-  --popover-foreground:          oklch(18% 0 0);
-
-  /* Subtle surface, secondary chrome, disabled affordances */
-  --muted:                       oklch(96% 0 0);
-  --muted-foreground:            oklch(48% 0 0);
+:root,
+.dark {
+  --background:         oklch(20% 0.012 264);   /* app shell, darkest */
+  --foreground:         oklch(92% 0.01 264);
+  --card:               oklch(23.5% 0.012 264); /* studio panel body, lifts above bg */
+  --card-foreground:    oklch(92% 0.01 264);
+  --popover:            oklch(27% 0.013 264);   /* command palette, floats highest */
+  --popover-foreground: oklch(93% 0.01 264);
+  --muted:              oklch(26% 0.012 264);
+  --muted-foreground:   oklch(68% 0.012 264);
 }
 ```
+
+The emphasis, state, affordance, and inverse roles below document the shadcn/ReUI **vocabulary and pairing convention**. Their literal values and inline comments are the pre-dark-first light originals, kept for reference only; the **canonical dark-first values live in `tokens.css`** (e.g. `--primary: oklch(62% 0.16 255)`, `--ring: oklch(72% 0.13 245)` deliberately brighter than primary for dark-surface contrast, `--invert` is a light chip on dark). Read those blocks for the variable names, not the numbers.
 
 **Emphasis roles** (interactive emphasis levels):
 
@@ -1026,39 +1047,18 @@ The naming follows shadcn/ui (the de facto industry standard) so contributors in
 
 Used by toasts, the command palette overlay (if added later), the "LIVE" badge in the toolbar, and any other surface that needs to contrast with `--background`.
 
-**Dark theme** (overrides via `.dark` class on `<html>`, per shadcn convention; OBS Browser Source supports class-based theme switching via `document.documentElement.classList`):
+**Light secondary** (`.light`): ported from the original light palette plus a faint cool chroma at hue 264 so toggling dark <-> light is hue-stable. The `.light` class on `<html>` is the opt-out from the dark default. Full values in `tokens.css`; representative surfaces: `--background: oklch(99% 0.004 264)`, `--card: oklch(97% 0.004 264)`, `--popover: oklch(99.5% 0.003 264)`, with `--foreground: oklch(20% 0.01 264)`. Chrome surfaces and shadows get light variants (lighter surfaces, much softer shadows).
 
-```css
-.dark {
-  --background:                  oklch(13% 0 0);
-  --foreground:                  oklch(95% 0 0);
+#### Chrome structure tokens (pro-tool shell, additive)
 
-  --card:                        oklch(16% 0 0);
-  --card-foreground:             oklch(95% 0 0);
+The pro-tool shell needs structural tokens the flat shadcn set lacks. Additive, no renames:
 
-  --popover:                     oklch(18% 0 0);
-  --popover-foreground:          oklch(95% 0 0);
+- **Layout metrics:** `--titlebar-height` (40px), `--toolrail-width` (48px), `--scenestrip-height` (88px), `--panel-header-height` (32px), `--panel-min-width` (200px), `--panel-default-width` (280px).
+- **Chrome surfaces:** `--titlebar`, `--panel-header`, `--toolrail`, `--divider` (the inset 1px seams between chrome regions, darker than `--border`).
+- **Elevation shadows:** `--shadow-panel` (docked panel lift), `--shadow-popover` (command palette, dropdowns), `--shadow-dragging` (a panel mid-drag, visual only this cycle).
+- **Shared focus recipe:** `--focus-ring` (a 2px background gap + 2px `--ring` outline) so every focusable shares one recipe.
 
-  --muted:                       oklch(18% 0 0);
-  --muted-foreground:            oklch(65% 0 0);
-
-  --secondary:                   oklch(20% 0 0);
-  --secondary-foreground:        oklch(95% 0 0);
-
-  --accent:                      oklch(20% 0 0);
-  --accent-foreground:            oklch(95% 0 0);
-
-  --border:                      oklch(25% 0 0);
-  --border-subtle:               oklch(20% 0 0);
-  --input:                       oklch(20% 0 0);
-  --ring:                        oklch(65% 0.18 250);
-
-  --invert:                      oklch(95% 0 0);   /* flips: light in dark theme */
-  --invert-foreground:           oklch(18% 0 0);
-}
-```
-
-**Editor universe vs theme universe.** The editor tokens above live in `shared/styles/tokens.css` and define the editor's single Linear-band restrained design. Each overlay theme in `themes/<name>.css` defines the **same variable names** with its own values, Cozy uses warm peach hues across `--background`/`--card`/`--primary`, Cyber uses cold cyan-neon, Editorial uses cool greyscale with one strong accent, Sticker uses high-saturation primary-school colors. A widget written against `--card-foreground` works identically in either universe.
+**Editor universe vs theme universe.** The editor tokens above live in `shared/styles/tokens.css` and define the editor's single dark-first pro-tool design (per [ADR-0003](../../decisions/0003-dark-first-pro-creative-tool-editor-aesthetic.md)). Each overlay theme in `themes/<name>.css` defines the **same variable names** with its own values, Cozy uses warm peach hues across `--background`/`--card`/`--primary`, Cyber uses cold cyan-neon, Editorial uses cool greyscale with one strong accent, Sticker uses high-saturation primary-school colors. A widget written against `--card-foreground` works identically in either universe.
 
 **Pair philosophy** (per Park UI). Each theme commits to **one accent hue + one neutral scale**. Documented pairings:
 
@@ -1130,6 +1130,16 @@ A theme tunes the radius identity by setting `--radius` to a new value (Sticker 
 ### 12.5 Iconography
 
 Lucide. Stroke width references `--stroke-thick` (1.5px at default). Sizes: 16px in inspector, 18px in toolbar, 20px in canvas overlays. No icon-set mixing. No emoji in editor chrome. Icons inherit color via `currentColor`; never hard-coded fills.
+
+### 12.6 Responsive, touch, and breakpoint tokens
+
+Added with the responsive shell ([ADR-0004](../../decisions/0004-responsive-editor-shell.md)):
+
+- **Breakpoints** (documentation-only custom properties `--bp-wide: 1280px`, `--bp-medium: 960px`, `--bp-floor: 640px`). CSS `@media`/`@container` cannot read `var()`, so these literals are mirrored in `routes/edit/shell-state.svelte.ts` (`BREAKPOINTS`, for `matchMedia`) and hard-coded in each query condition. The token block in `tokens.css` is the canonical human reference; the three copies are kept in sync by hand.
+- **Drawer + touch:** `--drawer-width: min(320px, 86vw)` (an off-canvas drawer never exceeds the viewport at 360px) and `--touch-target-min: 44px` (reached on coarse pointers via a transparent `::after` overlay, so the dense 28 to 32px visuals are unchanged).
+- **Fluid display type:** `--text-xl` and `--text-2xl` are `clamp()`-bounded (scaling between the 360px and 1280px viewports); the UI sizes (`--text-xs/sm/base/lg`) stay fixed so chrome text does not drift.
+- **Viewport height:** the shell uses `100dvh` (dynamic viewport height), not `100vh`.
+- **Reduced motion:** a global `@media (prefers-reduced-motion: reduce)` block in `reset.css` zeroes transitions and animations (0.01ms, so `transitionend` still fires), covering the drawer slide and all chrome motion. The editor budget (<= 300ms, `ease-out`) is unchanged; the drawer slide uses `--dur-slow` (240ms).
 
 ---
 

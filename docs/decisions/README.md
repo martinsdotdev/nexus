@@ -82,6 +82,8 @@ The spec at [`docs/superpowers/specs/`](../superpowers/specs/) is the *current* 
 | [0000](0000-record-architecture-decisions.md) | Record architecture decisions | accepted | 2026-05-13 |
 | [0001](0001-use-rfc-9457-problem-details-for-http-errors.md) | Use RFC 9457 Problem Details for HTTP error responses | accepted | 2026-05-13 |
 | [0002](0002-local-or-cloud-rust-core-with-qubit-rpc.md) | Local-or-cloud Rust core with qubit RPC and SvelteKit UI | accepted | 2026-05-13 |
+| [0003](0003-dark-first-pro-creative-tool-editor-aesthetic.md) | Dark-first pro-creative-tool editor aesthetic | accepted | 2026-05-27 |
+| [0004](0004-responsive-editor-shell.md) | Responsive editor shell via CSS-owned reflow, container-query panels, and off-canvas drawers | accepted | 2026-05-28 |
 
 When adding an ADR, append a row to this table.
 
