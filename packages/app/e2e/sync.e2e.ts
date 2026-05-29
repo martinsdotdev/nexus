@@ -7,8 +7,8 @@ import { expect, test } from '@playwright/test';
 test('a scene activation propagates from one tab to another', async ({ browser }) => {
 	const alice = await browser.newPage();
 	const bob = await browser.newPage();
-	await alice.goto('/edit.html');
-	await bob.goto('/edit.html');
+	await alice.goto('/edit');
+	await bob.goto('/edit');
 
 	const aliceCards = alice.locator('.scene-card');
 	const bobCards = bob.locator('.scene-card');
