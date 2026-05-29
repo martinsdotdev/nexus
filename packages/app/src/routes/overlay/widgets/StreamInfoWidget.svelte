@@ -9,7 +9,7 @@
 	let live = $state<{ title?: string; game?: string; viewers?: number }>({});
 	const title = $derived(live.title ?? String(instance.props.title ?? 'Untitled Stream'));
 	const game = $derived(live.game ?? String(instance.props.game ?? ''));
-	const viewers = $derived(live.viewers ?? 0);
+	const viewers = $derived(live.viewers ?? Number(instance.props.viewers ?? 0));
 
 	$effect(() =>
 		bus.subscribe('stream.info-changed', (event) => {
