@@ -9,11 +9,13 @@
 		onClose: () => void;
 		/** Placeholder for the search input. */
 		placeholder?: string;
-		/** The (static, in this prototype) command list. */
+		/** The command list. */
 		items: CommandItem[];
+		/** Called with the selected command's id (the palette then closes). */
+		onSelect: (id: string) => void;
 	}
 
-	let { open, onClose, placeholder = 'Type a command', items }: Props = $props();
+	let { open, onClose, placeholder = 'Type a command', items, onSelect }: Props = $props();
 
 	let query = $state('');
 	let highlighted = $state(0);
@@ -50,8 +52,10 @@
 			if (filtered.length > 0) highlighted = (safeIndex - 1 + filtered.length) % filtered.length;
 		} else if (event.key === 'Enter') {
 			event.preventDefault();
-			// Prototype: selecting a command just closes. Execution is deferred.
-			if (filtered.length > 0) onClose();
+			if (filtered.length > 0) {
+				onSelect(filtered[safeIndex].id);
+				onClose();
+			}
 		}
 	}
 </script>
@@ -82,7 +86,10 @@
 							class="result"
 							class:highlighted={index === safeIndex}
 							onmouseenter={() => (highlighted = index)}
-							onclick={onClose}
+							onclick={() => {
+								onSelect(item.id);
+								onClose();
+							}}
 						>
 							<span class="result-label">{item.label}</span>
 							{#if item.hint}

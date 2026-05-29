@@ -11,9 +11,23 @@
 		onToggleLeftDock: () => void;
 		/** Collapse the docked right panel, or toggle its drawer when off-canvas. */
 		onToggleRightDock: () => void;
+		/** Undo/redo availability + handlers (Loro UndoManager, this peer's edits). */
+		canUndo: boolean;
+		canRedo: boolean;
+		onUndo: () => void;
+		onRedo: () => void;
 	}
 
-	let { leftDrawerOpen, rightDrawerOpen, onToggleLeftDock, onToggleRightDock }: Props = $props();
+	let {
+		leftDrawerOpen,
+		rightDrawerOpen,
+		onToggleLeftDock,
+		onToggleRightDock,
+		canUndo,
+		canRedo,
+		onUndo,
+		onRedo
+	}: Props = $props();
 </script>
 
 <header class="titlebar">
@@ -42,9 +56,13 @@
 			<PanelRight size={16} />
 		</button>
 
-		<!-- Inert chrome in this prototype: visual only, wired to nothing. -->
-		<button class="ghost" aria-label="Undo" disabled><Undo2 size={16} /></button>
-		<button class="ghost" aria-label="Redo" disabled><Redo2 size={16} /></button>
+		<button class="ghost" aria-label="Undo" disabled={!canUndo} onclick={onUndo}>
+			<Undo2 size={16} />
+		</button>
+		<button class="ghost" aria-label="Redo" disabled={!canRedo} onclick={onRedo}>
+			<Redo2 size={16} />
+		</button>
+		<!-- Use in OBS lands with the obs-websocket integration (deferred). -->
 		<button class="primary" aria-label={m['editor.command.use_in_obs']()} disabled>
 			<MonitorPlay size={15} />
 			<span class="primary-label">{m['editor.command.use_in_obs']()}</span>

@@ -9,6 +9,12 @@
 	import EditorCanvas from '$lib/features/canvas-compose/ui/EditorCanvas.svelte';
 	import Inspector from '$lib/features/inspector/ui/Inspector.svelte';
 	import ThemeBuilder from '$lib/features/theme-builder/ui/ThemeBuilder.svelte';
+	import {
+		WIDGET_TYPES,
+		WIDGET_LABELS,
+		DEFAULT_WIDGET_SIZE,
+		DEFAULT_WIDGET_PROPS
+	} from '$lib/entities/widget';
 
 	const shell = createShellState();
 
@@ -46,7 +52,7 @@
 	);
 	const customThemes = $derived(workspace?.workspace.customThemes ?? []);
 
-	// Static command list for the prototype. Selecting one just closes the palette.
+	// The command palette's commands; runCommand dispatches by id.
 	const commands: CommandItem[] = [
 		{ id: 'add-widget', label: m['editor.command.add_widget']() },
 		{ id: 'switch-theme', label: m['editor.command.switch_theme']() },
@@ -56,13 +62,104 @@
 		{ id: 'fire-test-alert', label: m['editor.command.fire_test_alert']() }
 	];
 
-	// Cmd/Ctrl-K toggles the command palette. Attached on mount (never at module
-	// scope, which would run during prerender where window is undefined).
+	// Add a widget of the given type to the active scene, centered, and select it.
+	function addWidget(widgetType: string) {
+		const scene = activeScene;
+		if (!workspace || !scene) return;
+		const size = DEFAULT_WIDGET_SIZE[widgetType] ?? { w: 400, h: 200 };
+		const geom = {
+			x: Math.round((1920 - size.w) / 2),
+			y: Math.round((1080 - size.h) / 2),
+			w: size.w,
+			h: size.h,
+			z: 5
+		};
+		const id = workspace.createWidget(
+			scene.id,
+			widgetType,
+			geom,
+			DEFAULT_WIDGET_PROPS[widgetType] ?? {}
+		);
+		if (id) shell.selectWidget(id);
+	}
+
+	function runCommand(id: string) {
+		if (id === 'add-widget') addWidget('stream-info');
+		else if (id === 'switch-theme') shell.openThemeEditor();
+		// toggle-mode, open-layout, use-in-obs, fire-test-alert: deferred to their own
+		// increments (live/draft, layout switching, OBS, real event sources).
+	}
+
+	// Editor keyboard shortcuts (client-only; never at module scope). Cmd/Ctrl-K
+	// opens the palette; undo/redo + canvas shortcuts apply only when NOT typing in a
+	// field, so they never hijack text editing.
 	$effect(() => {
 		const onKey = (event: KeyboardEvent) => {
-			if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
+			const mod = event.metaKey || event.ctrlKey;
+			if (mod && event.key.toLowerCase() === 'k') {
 				event.preventDefault();
 				shell.togglePalette();
+				return;
+			}
+			const target = event.target as HTMLElement | null;
+			const typing =
+				!!target &&
+				(target.tagName === 'INPUT' ||
+					target.tagName === 'TEXTAREA' ||
+					target.tagName === 'SELECT' ||
+					target.isContentEditable);
+			if (typing || !workspace) return;
+
+			if (mod && event.key.toLowerCase() === 'z') {
+				event.preventDefault();
+				if (event.shiftKey) workspace.redo();
+				else workspace.undo();
+				return;
+			}
+			if (mod && event.key.toLowerCase() === 'y') {
+				event.preventDefault();
+				workspace.redo();
+				return;
+			}
+
+			const selected = shell.selectedWidgetId;
+			if ((event.key === 'Delete' || event.key === 'Backspace') && selected) {
+				event.preventDefault();
+				workspace.deleteWidget(selected);
+				shell.clearSelection();
+				return;
+			}
+			if (event.key === 'Escape') {
+				shell.clearSelection();
+				return;
+			}
+
+			const nudges: Record<string, [number, number]> = {
+				ArrowLeft: [-1, 0],
+				ArrowRight: [1, 0],
+				ArrowUp: [0, -1],
+				ArrowDown: [0, 1]
+			};
+			const nudge = nudges[event.key];
+			if (selected && nudge) {
+				event.preventDefault();
+				const widget = activeScene?.widgets.find((w) => w.id === selected);
+				if (widget) {
+					const step = event.shiftKey ? 10 : 1;
+					workspace.setWidgetGeometry(selected, {
+						x: widget.x + nudge[0] * step,
+						y: widget.y + nudge[1] * step
+					});
+				}
+				return;
+			}
+
+			if (['1', '2', '3', '4'].includes(event.key)) {
+				const scene = workspace.scenes[Number(event.key) - 1];
+				if (scene) {
+					event.preventDefault();
+					workspace.activate(scene.id);
+				}
 			}
 		};
 		window.addEventListener('keydown', onKey);
@@ -79,12 +176,12 @@
 <!-- Panel bodies are defined once and rendered in both the docked StudioPanel and its
      off-canvas drawer twin. Scoped styles below follow the snippet to either mount. -->
 {#snippet widgetsBody()}
-	<ul class="placeholder-list">
-		<li>Webcam frame</li>
-		<li>Chat box</li>
-		<li>Alerts</li>
-		<li>Goal bar</li>
-		<li>Now playing</li>
+	<ul class="widget-list">
+		{#each WIDGET_TYPES as type (type)}
+			<li>
+				<button onclick={() => addWidget(type)}>{WIDGET_LABELS[type]}</button>
+			</li>
+		{/each}
 	</ul>
 {/snippet}
 
@@ -121,6 +218,10 @@
 		rightDrawerOpen={shell.rightDrawerOpen}
 		onToggleLeftDock={() => shell.toggleLeftDock()}
 		onToggleRightDock={() => shell.toggleRightDock()}
+		canUndo={workspace?.canUndo ?? false}
+		canRedo={workspace?.canRedo ?? false}
+		onUndo={() => workspace?.undo()}
+		onRedo={() => workspace?.redo()}
 	/>
 	<ToolRail activeToolId={shell.activeToolId} onSelect={(id) => shell.setActiveTool(id)} />
 
@@ -185,6 +286,7 @@
 	onClose={() => shell.closePalette()}
 	placeholder={m['editor.palette.placeholder']()}
 	items={commands}
+	onSelect={runCommand}
 />
 
 <style>
@@ -214,17 +316,36 @@
 		grid-area: dock-right;
 	}
 
-	.placeholder-list {
+	.widget-list {
 		display: flex;
 		flex-direction: column;
 		gap: var(--space-1);
-		color: var(--muted-foreground);
+		list-style: none;
+		margin: 0;
+		padding: 0;
 	}
 
-	.placeholder-list li {
+	.widget-list button {
+		width: 100%;
+		text-align: left;
 		padding: var(--space-2);
 		border-radius: var(--radius-sm);
 		background: var(--muted);
+		color: var(--foreground);
+		font: inherit;
+		font-size: var(--text-sm);
+		border: var(--stroke-thin) solid transparent;
+		cursor: pointer;
+		transition: border-color var(--dur-fast) var(--ease-out);
+	}
+
+	.widget-list button:hover {
+		border-color: var(--border);
+	}
+
+	.widget-list button:focus-visible {
+		outline: none;
+		box-shadow: var(--focus-ring);
 	}
 
 	/*

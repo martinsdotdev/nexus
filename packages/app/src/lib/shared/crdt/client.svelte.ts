@@ -60,10 +60,12 @@ export function createWorkspaceClient(url: string): WorkspaceClient {
 	const sync: SyncConnection = connectSync(doc, url);
 
 	// Local undo over THIS peer's edits only; remote merges + relay repairs are a
-	// different peer and never land on the stack. A 300ms merge window coalesces
-	// a burst (e.g. inspector typing) into one step; a drag commits once on
-	// pointer-up so it is already a single step.
-	const undo = new UndoManager(doc, { mergeInterval: 300 });
+	// different peer and never land on the stack. mergeInterval 0 keeps each commit
+	// its own undo step: a drag/add/delete commits exactly once, and discrete
+	// actions never merge (a time window would fold a scene activation into a later
+	// add, so one undo would revert both). Inspector typing is per-keystroke but
+	// predictable; debounced commits are a later refinement.
+	const undo = new UndoManager(doc, { mergeInterval: 0 });
 
 	function activeLayout() {
 		const tree = doc.getTree(TREE);
