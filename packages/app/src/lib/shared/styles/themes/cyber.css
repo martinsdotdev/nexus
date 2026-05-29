@@ -1,0 +1,47 @@
+/* Cyber theme: cold cyan-neon on near-black, sharp corners, mono type. */
+[data-theme='cyber'] {
+	/* Surfaces */
+	--background: oklch(18% 0.03 250);
+	--foreground: oklch(95% 0.02 200);
+	--card: oklch(24% 0.04 250);
+	--card-foreground: oklch(95% 0.02 200);
+	--popover: oklch(22% 0.04 250);
+	--popover-foreground: oklch(95% 0.02 200);
+	--muted: oklch(30% 0.03 250);
+	--muted-foreground: oklch(72% 0.05 200);
+
+	/* Emphasis */
+	--primary: oklch(75% 0.2 200);
+	--primary-foreground: oklch(15% 0.03 250);
+	--secondary: oklch(30% 0.04 290);
+	--secondary-foreground: oklch(95% 0.02 200);
+	--accent: oklch(70% 0.22 320);
+	--accent-foreground: oklch(15% 0.03 250);
+
+	/* State */
+	--info: oklch(72% 0.16 230);
+	--info-foreground: oklch(15% 0 0);
+	--success: oklch(78% 0.2 150);
+	--success-foreground: oklch(15% 0 0);
+	--warning: oklch(82% 0.18 95);
+	--warning-foreground: oklch(15% 0 0);
+	--destructive: oklch(65% 0.24 15);
+	--destructive-foreground: oklch(98% 0 0);
+
+	/* Affordances */
+	--border: oklch(45% 0.08 200);
+	--border-subtle: oklch(34% 0.05 250);
+	--input: oklch(28% 0.04 250);
+	--ring: oklch(75% 0.2 200);
+
+	/* Inverse */
+	--invert: oklch(95% 0.02 200);
+	--invert-foreground: oklch(18% 0.03 250);
+
+	/* Shape & motion */
+	--radius: 2px;
+	--shadow-widget: 0 0 16px oklch(75% 0.2 200 / 0.35);
+	--font-display: 'Orbitron', 'Share Tech Mono', monospace;
+	--font-body: 'Share Tech Mono', monospace;
+	--motion-feel: 'snappy';
+}
