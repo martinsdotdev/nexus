@@ -7,3 +7,7 @@ pub const TREE: &str = "tree";
 
 /// Root `LoroMap` holding workspace-level pointers (`activeLayoutId`, ...).
 pub const WORKSPACE: &str = "workspace";
+
+/// Root `LoroMap` of user-authored custom themes (ADR-0006), keyed by a
+/// client-minted unique id. Each value is a map of `{ name, base, tokens }`.
+pub const THEMES: &str = "themes";

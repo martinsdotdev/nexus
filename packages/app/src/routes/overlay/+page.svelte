@@ -71,7 +71,11 @@
 
 <div class="overlay-viewport">
 	{#if scene}
-		{@const themeStyle = resolveThemeStyle(scene.themeId, [], scene.overridesAccent)}
+		{@const themeStyle = resolveThemeStyle(
+			scene.themeId,
+			workspace?.customThemes ?? [],
+			scene.overridesAccent
+		)}
 		<div
 			class="overlay-canvas"
 			data-theme={themeStyle.dataTheme}

@@ -41,10 +41,26 @@ export interface WorkspaceView {
 	scenes: SceneView[];
 	// Every layout, so the overlay can select one by ?layout=.
 	layouts: LayoutView[];
+	// User-authored custom themes (ADR-0006), the read-model side of the doc's
+	// "themes" registry. Consumed by resolveThemeStyle (entities/theme).
+	customThemes: CustomTheme[];
+}
+
+/** A token name -> value (a literal, or a `link:<token>` reference). */
+export type ThemeTokens = Record<string, string>;
+
+/** A user-authored theme stored in the doc's "themes" registry (ADR-0006). */
+export interface CustomTheme {
+	id: string;
+	name: string;
+	/** The built-in this theme derives from; unset tokens fall back to it. */
+	base: string;
+	tokens: ThemeTokens;
 }
 
 const TREE = 'tree';
 const WORKSPACE = 'workspace';
+const THEMES = 'themes';
 const STRUCTURAL = new Set(['type', 'widgetType', 'x', 'y', 'w', 'h', 'z', 'visible', 'locked']);
 
 const str = (value: unknown): string => (value == null ? '' : String(value));
@@ -106,6 +122,26 @@ export function readWorkspace(doc: LoroDoc): WorkspaceView {
 		activeLayoutId,
 		activeSceneId: active?.activeSceneId ?? '',
 		scenes: active?.scenes ?? [],
-		layouts
+		layouts,
+		customThemes: readCustomThemes(doc)
 	};
+}
+
+/** Project the doc's "themes" registry into the read model. Total: a missing or
+ *  malformed registry yields no themes. */
+function readCustomThemes(doc: LoroDoc): CustomTheme[] {
+	const raw = doc.getMap(THEMES).toJSON() as Record<
+		string,
+		{ name?: unknown; base?: unknown; tokens?: Record<string, unknown> }
+	>;
+	return Object.entries(raw)
+		.map(([id, theme]) => ({
+			id,
+			name: String(theme?.name ?? ''),
+			base: String(theme?.base ?? ''),
+			tokens: Object.fromEntries(
+				Object.entries(theme?.tokens ?? {}).map(([key, value]) => [key, String(value)])
+			)
+		}))
+		.sort((a, b) => a.id.localeCompare(b.id));
 }

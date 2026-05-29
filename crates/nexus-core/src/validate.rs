@@ -4,15 +4,23 @@
 //!
 //! Invariant classes:
 //! - **Repairable**: an active layout's `active_scene_id` points to no scene it
-//!   owns -> reset to its first scene.
+//!   owns -> reset to its first scene; a scene's `theme_id` names neither a
+//!   built-in nor a registered custom theme -> reset to the default theme.
 //! - **Strong**: an archived layout must hold no active scene -> blank it
 //!   (archive wins over a concurrent activation).
 //! - Weak invariants (concurrent activations of the same layout) need no repair:
 //!   Loro's LWW already converges them.
 
+use std::collections::HashSet;
+
 use crate::model::Workspace;
 use crate::schema;
 use loro::LoroDoc;
+
+/// The four built-in themes that ship as CSS (ADR-0006); a scene may reference
+/// one of these or a custom theme registered in the doc.
+pub const BUILTIN_THEMES: [&str; 4] = ["cozy", "cyber", "editorial", "sticker"];
+const DEFAULT_THEME: &str = "cozy";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RepairClass {
@@ -23,24 +31,35 @@ pub enum RepairClass {
 /// A corrective operation the relay applies after a merge to restore an
 /// invariant. Plain data (no Loro handles) so the predicate stays portable.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Repair {
-    pub layout_id: String,
-    pub new_active_scene_id: String,
-    pub class: RepairClass,
-    pub reason: String,
+pub enum Repair {
+    /// Set a layout's `activeSceneId` (reset a dangling one, or blank an
+    /// archived layout's).
+    SetActiveScene {
+        layout_id: String,
+        scene_id: String,
+        class: RepairClass,
+        reason: String,
+    },
+    /// Reset a scene's `themeId` that references a theme that no longer exists.
+    SetSceneTheme {
+        scene_id: String,
+        theme_id: String,
+        reason: String,
+    },
 }
 
 /// Check the merged read model and return the corrective ops needed to restore
 /// invariants. Pure and total: a malformed workspace yields repairs, never a panic.
 pub fn validate(ws: &Workspace) -> Vec<Repair> {
     let mut repairs = Vec::new();
+
     for layout in &ws.layouts {
         if layout.status == "archived" {
             // Strong: archive wins over any concurrent activation.
             if !layout.active_scene_id.is_empty() {
-                repairs.push(Repair {
+                repairs.push(Repair::SetActiveScene {
                     layout_id: layout.id.clone(),
-                    new_active_scene_id: String::new(),
+                    scene_id: String::new(),
                     class: RepairClass::Strong,
                     reason: "archived layout must hold no active scene".into(),
                 });
@@ -57,31 +76,70 @@ pub fn validate(ws: &Workspace) -> Vec<Repair> {
                     .first()
                     .map(|scene| scene.id.clone())
                     .unwrap_or_default();
-                repairs.push(Repair {
+                repairs.push(Repair::SetActiveScene {
                     layout_id: layout.id.clone(),
-                    new_active_scene_id: fallback,
+                    scene_id: fallback,
                     class: RepairClass::Repairable,
                     reason: "active scene missing; reset to first scene".into(),
                 });
             }
         }
     }
+
+    // Repairable: a scene's theme must be a built-in or a registered custom theme.
+    let known: HashSet<&str> = BUILTIN_THEMES
+        .iter()
+        .copied()
+        .chain(ws.themes.iter().map(|theme| theme.id.as_str()))
+        .collect();
+    for layout in &ws.layouts {
+        for scene in &layout.scenes {
+            if !scene.theme_id.is_empty() && !known.contains(scene.theme_id.as_str()) {
+                repairs.push(Repair::SetSceneTheme {
+                    scene_id: scene.id.clone(),
+                    theme_id: DEFAULT_THEME.into(),
+                    reason: "theme missing; reset to default".into(),
+                });
+            }
+        }
+    }
+
     repairs
 }
 
-/// Write the repairs back into the document as `activeSceneId` ops. The relay
-/// runs this after merging a peer update; the corrective ops then propagate to
-/// every replica via the normal sync path. A no-op when there is nothing to fix.
+/// Write the repairs back into the document. The relay runs this after merging a
+/// peer update; the corrective ops then propagate to every replica via the normal
+/// sync path. A no-op when there is nothing to fix.
 pub fn apply_repairs(doc: &LoroDoc, repairs: &[Repair]) -> loro::LoroResult<()> {
     if repairs.is_empty() {
         return Ok(());
     }
     let tree = doc.get_tree(schema::TREE);
-    for layout_id in tree.roots() {
-        let key = layout_id.to_string();
-        for repair in repairs.iter().filter(|repair| repair.layout_id == key) {
-            tree.get_meta(layout_id)?
-                .insert("activeSceneId", repair.new_active_scene_id.clone())?;
+    for repair in repairs {
+        match repair {
+            Repair::SetActiveScene {
+                layout_id,
+                scene_id,
+                ..
+            } => {
+                for root in tree.roots() {
+                    if root.to_string() == *layout_id {
+                        tree.get_meta(root)?
+                            .insert("activeSceneId", scene_id.clone())?;
+                    }
+                }
+            }
+            Repair::SetSceneTheme {
+                scene_id, theme_id, ..
+            } => {
+                for root in tree.roots() {
+                    for child in tree.children(root).unwrap_or_default() {
+                        if child.to_string() == *scene_id {
+                            tree.get_meta(child)?.insert("themeId", theme_id.clone())?;
+                        }
+                    }
+                }
+            }
         }
     }
     doc.commit();
@@ -92,7 +150,7 @@ pub fn apply_repairs(doc: &LoroDoc, repairs: &[Repair]) -> loro::LoroResult<()> 
 mod tests {
     use super::*;
     use crate::default_doc::build_default;
-    use crate::model::{Layout, Scene, read_workspace};
+    use crate::model::{Layout, Scene, ThemeDef, read_workspace};
 
     fn scene(id: &str, kind: &str) -> Scene {
         Scene {
@@ -117,6 +175,7 @@ mod tests {
         Workspace {
             active_layout_id: "L".into(),
             layouts: vec![layout],
+            themes: Vec::new(),
         }
     }
 
@@ -129,16 +188,58 @@ mod tests {
     fn dangling_active_scene_is_repairable_to_first() {
         let repairs = validate(&workspace(layout("active", "ghost")));
         assert_eq!(repairs.len(), 1);
-        assert_eq!(repairs[0].class, RepairClass::Repairable);
-        assert_eq!(repairs[0].new_active_scene_id, "s0");
+        match &repairs[0] {
+            Repair::SetActiveScene {
+                class, scene_id, ..
+            } => {
+                assert_eq!(*class, RepairClass::Repairable);
+                assert_eq!(scene_id, "s0");
+            }
+            other => panic!("expected SetActiveScene, got {other:?}"),
+        }
     }
 
     #[test]
     fn archived_layout_must_not_hold_active_scene() {
         let repairs = validate(&workspace(layout("archived", "s0")));
         assert_eq!(repairs.len(), 1);
-        assert_eq!(repairs[0].class, RepairClass::Strong);
-        assert_eq!(repairs[0].new_active_scene_id, "");
+        match &repairs[0] {
+            Repair::SetActiveScene {
+                class, scene_id, ..
+            } => {
+                assert_eq!(*class, RepairClass::Strong);
+                assert_eq!(scene_id, "");
+            }
+            other => panic!("expected SetActiveScene, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn dangling_theme_ref_is_repaired_to_default() {
+        let mut ws = workspace(layout("active", "s0"));
+        ws.layouts[0].scenes[0].theme_id = "deleted-theme".into();
+        let repairs = validate(&ws);
+        let found = repairs.iter().find_map(|repair| match repair {
+            Repair::SetSceneTheme {
+                scene_id, theme_id, ..
+            } => Some((scene_id.clone(), theme_id.clone())),
+            _ => None,
+        });
+        assert_eq!(found, Some(("s0".into(), "cozy".into())));
+    }
+
+    #[test]
+    fn builtin_and_registered_themes_need_no_repair() {
+        let mut ws = workspace(layout("active", "s0"));
+        ws.layouts[0].scenes[0].theme_id = "cozy".into();
+        ws.layouts[0].scenes[1].theme_id = "theme-custom".into();
+        ws.themes = vec![ThemeDef {
+            id: "theme-custom".into(),
+            name: "Custom".into(),
+            base: "cozy".into(),
+            tokens: Default::default(),
+        }];
+        assert!(validate(&ws).is_empty());
     }
 
     #[test]
@@ -164,6 +265,29 @@ mod tests {
             ws.layouts[0].active_scene_id, ws.layouts[0].scenes[0].id,
             "repaired to the first scene"
         );
+        assert!(validate(&ws).is_empty(), "no residual violations");
+    }
+
+    #[test]
+    fn apply_repairs_fixes_dangling_theme() {
+        let doc = LoroDoc::new();
+        build_default(&doc).unwrap();
+
+        // Corrupt the live scene's theme to one that does not exist.
+        let tree = doc.get_tree(schema::TREE);
+        let live = tree.children(tree.roots()[0]).unwrap()[0];
+        tree.get_meta(live)
+            .unwrap()
+            .insert("themeId", "deleted")
+            .unwrap();
+        doc.commit();
+
+        let repairs = validate(&read_workspace(&doc));
+        assert_eq!(repairs.len(), 1, "the dangling theme is detected");
+        apply_repairs(&doc, &repairs).unwrap();
+
+        let ws = read_workspace(&doc);
+        assert_eq!(ws.layouts[0].scenes[0].theme_id, "cozy", "reset to default");
         assert!(validate(&ws).is_empty(), "no residual violations");
     }
 

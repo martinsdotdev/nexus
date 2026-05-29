@@ -7,7 +7,12 @@
 
 import { LoroDoc, UndoManager } from 'loro-crdt';
 import { connectSync, type SyncConnection } from './sync-bridge';
-import { readWorkspace, type SceneView, type WorkspaceView } from './workspace-view';
+import {
+	readWorkspace,
+	type SceneView,
+	type WorkspaceView,
+	type ThemeTokens
+} from './workspace-view';
 import * as mutate from './mutations';
 import type { WidgetGeometry } from './mutations';
 
@@ -35,6 +40,11 @@ export interface WorkspaceClient {
 	moveWidgetToScene(id: string, sceneId: string): void;
 	setSceneTheme(sceneId: string, themeId: string): void;
 	setSceneOverride(sceneId: string, key: string, value: string): void;
+	createTheme(name: string, base: string, tokens: ThemeTokens): string;
+	renameTheme(id: string, name: string): void;
+	setThemeToken(id: string, token: string, value: string): void;
+	deleteTheme(id: string): void;
+	exportTheme(id: string): { name: string; base: string; tokens: ThemeTokens } | null;
 	undo(): void;
 	redo(): void;
 	dispose(): void;
@@ -125,6 +135,28 @@ export function createWorkspaceClient(url: string): WorkspaceClient {
 		setSceneOverride(sceneId, key, value) {
 			mutate.setSceneOverride(doc, sceneId, key, value);
 			doc.commit();
+		},
+		createTheme(name, base, tokens) {
+			// Mint a unique id (never the name) so concurrent creates never collide.
+			const id = `theme-${crypto.randomUUID()}`;
+			mutate.createTheme(doc, id, name, base, tokens);
+			doc.commit();
+			return id;
+		},
+		renameTheme(id, name) {
+			mutate.renameTheme(doc, id, name);
+			doc.commit();
+		},
+		setThemeToken(id, token, value) {
+			mutate.setThemeToken(doc, id, token, value);
+			doc.commit();
+		},
+		deleteTheme(id) {
+			mutate.deleteTheme(doc, id);
+			doc.commit();
+		},
+		exportTheme(id) {
+			return mutate.exportTheme(doc, id);
 		},
 		undo() {
 			undo.undo();

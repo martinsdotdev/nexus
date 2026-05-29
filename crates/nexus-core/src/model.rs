@@ -2,6 +2,8 @@
 //! them. The validator works against these structs, not raw `LoroDoc` handles,
 //! keeping the invariant predicates WASM-portable later (ADR-0005 / plan T7).
 
+use std::collections::BTreeMap;
+
 use crate::schema;
 use loro::{LoroDoc, LoroMap, LoroValue, ValueOrContainer};
 
@@ -10,6 +12,16 @@ use loro::{LoroDoc, LoroMap, LoroValue, ValueOrContainer};
 pub struct Workspace {
     pub active_layout_id: String,
     pub layouts: Vec<Layout>,
+    pub themes: Vec<ThemeDef>,
+}
+
+/// A user-authored custom theme stored in the workspace doc (ADR-0006).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ThemeDef {
+    pub id: String,
+    pub name: String,
+    pub base: String,
+    pub tokens: BTreeMap<String, String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -76,6 +88,45 @@ pub fn read_workspace(doc: &LoroDoc) -> Workspace {
     Workspace {
         active_layout_id: map_str(&workspace, "activeLayoutId"),
         layouts,
+        themes: read_themes(doc),
+    }
+}
+
+/// Read the custom-theme registry (root "themes" map) into the read model. Total:
+/// a missing or malformed registry yields no themes. Sorted by id for determinism.
+fn read_themes(doc: &LoroDoc) -> Vec<ThemeDef> {
+    let LoroValue::Map(entries) = doc.get_map(schema::THEMES).get_deep_value() else {
+        return Vec::new();
+    };
+    let mut themes: Vec<ThemeDef> = entries
+        .iter()
+        .filter_map(|(id, value)| {
+            let LoroValue::Map(theme) = value else {
+                return None;
+            };
+            let tokens = match theme.get("tokens") {
+                Some(LoroValue::Map(token_map)) => token_map
+                    .iter()
+                    .map(|(key, val)| (key.clone(), value_str(val)))
+                    .collect(),
+                _ => BTreeMap::new(),
+            };
+            Some(ThemeDef {
+                id: id.to_string(),
+                name: theme.get("name").map(value_str).unwrap_or_default(),
+                base: theme.get("base").map(value_str).unwrap_or_default(),
+                tokens,
+            })
+        })
+        .collect();
+    themes.sort_by(|a, b| a.id.cmp(&b.id));
+    themes
+}
+
+fn value_str(value: &LoroValue) -> String {
+    match value {
+        LoroValue::String(s) => s.to_string(),
+        _ => String::new(),
     }
 }
 

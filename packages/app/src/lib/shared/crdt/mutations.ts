@@ -5,9 +5,12 @@
 // testable. Widget default props are supplied by the caller (an upper FSD layer
 // that may read entities/widget), keeping this shared module entity-free.
 
+import { LoroMap } from 'loro-crdt';
 import type { LoroDoc, LoroTreeNode, TreeID } from 'loro-crdt';
+import type { ThemeTokens } from './workspace-view';
 
 const TREE = 'tree';
+const THEMES = 'themes';
 
 function nodeById(doc: LoroDoc, id: string): LoroTreeNode | undefined {
 	return doc.getTree(TREE).getNodeByID(id as TreeID);
@@ -83,4 +86,56 @@ export function setSceneTheme(doc: LoroDoc, sceneId: string, themeId: string): v
 
 export function setSceneOverride(doc: LoroDoc, sceneId: string, key: string, value: string): void {
 	nodeById(doc, sceneId)?.data.set(key, value);
+}
+
+// --- Custom theme registry (root "themes" map of nested theme maps) ----------
+// Theme ids are caller-minted (unique, never names) so two themes named the same
+// never collide on merge (trap T1). Token values are literals or `link:<token>`.
+
+function themeContainer(doc: LoroDoc, id: string): LoroMap | undefined {
+	const container = doc.getMap(THEMES).get(id);
+	return container instanceof LoroMap ? container : undefined;
+}
+
+export function createTheme(
+	doc: LoroDoc,
+	id: string,
+	name: string,
+	base: string,
+	tokens: ThemeTokens
+): void {
+	const theme = doc.getMap(THEMES).setContainer(id, new LoroMap());
+	theme.set('name', name);
+	theme.set('base', base);
+	const tokenMap = theme.setContainer('tokens', new LoroMap());
+	for (const [key, value] of Object.entries(tokens)) tokenMap.set(key, value);
+}
+
+export function renameTheme(doc: LoroDoc, id: string, name: string): void {
+	themeContainer(doc, id)?.set('name', name);
+}
+
+/** Set one token's value (a literal or a `link:<token>` reference). */
+export function setThemeToken(doc: LoroDoc, id: string, token: string, value: string): void {
+	const tokens = themeContainer(doc, id)?.get('tokens');
+	if (tokens instanceof LoroMap) tokens.set(token, value);
+}
+
+export function deleteTheme(doc: LoroDoc, id: string): void {
+	doc.getMap(THEMES).delete(id);
+}
+
+/** Read a theme out to a plain JSON value (for export); null if it is gone. */
+export function exportTheme(
+	doc: LoroDoc,
+	id: string
+): { name: string; base: string; tokens: ThemeTokens } | null {
+	const theme = themeContainer(doc, id);
+	if (!theme) return null;
+	const tokens = theme.get('tokens');
+	return {
+		name: String(theme.get('name') ?? ''),
+		base: String(theme.get('base') ?? ''),
+		tokens: tokens instanceof LoroMap ? (tokens.toJSON() as ThemeTokens) : {}
+	};
 }

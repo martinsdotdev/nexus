@@ -161,6 +161,34 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn repairs_dangling_peer_theme() {
+        let dir = tempfile::tempdir().unwrap();
+        let runtime = WorkspaceRuntime::new(FilePersistence::new(dir.path())).unwrap();
+
+        // A peer points the live scene at a theme that does not exist.
+        let peer = LoroDoc::new();
+        peer.set_peer_id(3).unwrap();
+        peer.import(&runtime.snapshot()).unwrap();
+        let base = peer.oplog_vv();
+        let tree = peer.get_tree(nexus_core::schema::TREE);
+        let live = tree.children(tree.roots()[0]).unwrap()[0];
+        tree.get_meta(live)
+            .unwrap()
+            .insert("themeId", "deleted-theme")
+            .unwrap();
+        peer.commit();
+        let update = peer.export(loro::ExportMode::updates(&base)).unwrap();
+
+        runtime.apply_remote(&update).await.unwrap();
+
+        let ws = runtime.workspace();
+        assert_eq!(
+            ws.layouts[0].scenes[0].theme_id, "cozy",
+            "dangling theme repaired to the default"
+        );
+    }
+
+    #[tokio::test]
     async fn reloads_persisted_state_on_restart() {
         let dir = tempfile::tempdir().unwrap();
         let target = {

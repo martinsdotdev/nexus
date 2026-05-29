@@ -6,13 +6,8 @@
 // detection; a dangling or cyclic token is dropped so the base CSS still covers
 // it. An accent override is appended last so it wins.
 
-import {
-	DEFAULT_THEME_ID,
-	LINK_PREFIX,
-	THEME_TOKENS,
-	isBuiltinTheme,
-	type CustomTheme
-} from '../model/tokens';
+import { DEFAULT_THEME_ID, LINK_PREFIX, THEME_TOKENS, isBuiltinTheme } from '../model/tokens';
+import type { CustomTheme } from '$lib/shared/crdt/workspace-view';
 
 export interface ResolvedThemeStyle {
 	/** Value for the canvas root's `data-theme` attribute. */

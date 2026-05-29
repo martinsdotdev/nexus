@@ -36,7 +36,7 @@
 	);
 	const widgets = $derived((scene?.widgets ?? []).slice().sort((a, b) => a.z - b.z));
 	const themeStyle = $derived(
-		scene ? resolveThemeStyle(scene.themeId, [], scene.overridesAccent) : null
+		scene ? resolveThemeStyle(scene.themeId, view?.customThemes ?? [], scene.overridesAccent) : null
 	);
 
 	let areaW = $state(0);

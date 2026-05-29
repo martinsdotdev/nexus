@@ -82,15 +82,3 @@ export function isColorToken(token: string): boolean {
 export function isBuiltinTheme(id: string): id is BuiltinThemeId {
 	return (BUILTIN_THEME_IDS as readonly string[]).includes(id);
 }
-
-/** Token name -> value (literal or `link:<token>`). */
-export type ThemeTokens = Record<string, string>;
-
-/** A user-authored theme stored as data in the workspace doc. */
-export interface CustomTheme {
-	id: string;
-	name: string;
-	/** The built-in this theme derives from; unset tokens fall back to it. */
-	base: string;
-	tokens: ThemeTokens;
-}

@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { resolveThemeStyle } from './resolve-theme-style';
-import type { CustomTheme } from '../model/tokens';
+import type { CustomTheme } from '$lib/shared/crdt/workspace-view';
 
 const custom = (tokens: Record<string, string>, base = 'cyber'): CustomTheme => ({
 	id: 'theme-x',
