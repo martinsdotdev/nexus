@@ -29,6 +29,10 @@ export function createShellState() {
 	let rightDrawerOpen = $state(false);
 	let viewportMode = $state<ViewportMode>('wide');
 	let paletteOpen = $state(false);
+	// Per-user selection: which widget(s) are selected on the canvas. Local-only
+	// (never synced; collaborators select independently). Single-select for now;
+	// the array shape leaves multi-select open without a reshape.
+	let selectedWidgetIds = $state<string[]>([]);
 
 	return {
 		get activeToolId() {
@@ -138,6 +142,22 @@ export function createShellState() {
 		},
 		closePalette() {
 			paletteOpen = false;
+		},
+
+		get selectedWidgetIds() {
+			return selectedWidgetIds;
+		},
+		get selectedWidgetId(): string | null {
+			return selectedWidgetIds[0] ?? null;
+		},
+		isWidgetSelected(id: string) {
+			return selectedWidgetIds.includes(id);
+		},
+		selectWidget(id: string | null) {
+			selectedWidgetIds = id ? [id] : [];
+		},
+		clearSelection() {
+			selectedWidgetIds = [];
 		}
 	};
 }

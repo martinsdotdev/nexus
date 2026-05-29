@@ -6,6 +6,7 @@
 	import ToolRail from './ToolRail.svelte';
 	import SceneStrip from './SceneStrip.svelte';
 	import { createWorkspaceClient, type WorkspaceClient } from '$lib/shared/crdt/client.svelte';
+	import EditorCanvas from '$lib/features/canvas-compose/ui/EditorCanvas.svelte';
 
 	const shell = createShellState();
 
@@ -106,11 +107,11 @@
 		</StudioPanel>
 	</div>
 
-	<div class="canvas-area">
-		<div class="canvas-frame">
-			<span class="canvas-label">{m['editor.canvas.dimensions']()}</span>
-		</div>
-	</div>
+	<EditorCanvas
+		view={workspace?.workspace ?? null}
+		selectedWidgetId={shell.selectedWidgetId}
+		onSelectWidget={(id) => shell.selectWidget(id)}
+	/>
 
 	<div class="dock dock-right">
 		<StudioPanel
@@ -182,34 +183,6 @@
 
 	.dock-right {
 		grid-area: dock-right;
-	}
-
-	.canvas-area {
-		grid-area: canvas;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		padding: var(--space-5);
-		overflow: hidden;
-	}
-
-	.canvas-frame {
-		width: 100%;
-		max-height: 100%;
-		aspect-ratio: 16 / 9;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		border-radius: var(--radius-canvas);
-		background: var(--card);
-		border: var(--stroke-thin) solid var(--border);
-		box-shadow: var(--shadow-panel);
-	}
-
-	.canvas-label {
-		font-family: var(--font-mono);
-		font-size: var(--text-sm);
-		color: var(--muted-foreground);
 	}
 
 	.placeholder-list {
@@ -299,10 +272,6 @@
 				'scenestrip';
 			grid-template-columns: 1fr;
 			grid-template-rows: var(--titlebar-height) auto 1fr var(--scenestrip-height);
-		}
-
-		.canvas-area {
-			padding: var(--space-2);
 		}
 	}
 </style>

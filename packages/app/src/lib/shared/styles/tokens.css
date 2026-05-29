@@ -150,6 +150,10 @@
 	--toolrail: oklch(18.5% 0.012 264);
 	--divider: oklch(15% 0.01 264);
 
+	/* Editor selection chrome on the canvas. Distinct from the overlay theme's
+	   tokens (never overridden by [data-theme]) so selection stays editor-blue. */
+	--editor-selection: oklch(70% 0.17 250);
+
 	/* Elevation / depth */
 	--shadow-panel: 0 1px 2px oklch(0% 0 0 / 0.4);
 	--shadow-popover: 0 8px 24px oklch(0% 0 0 / 0.5), 0 2px 6px oklch(0% 0 0 / 0.4);
@@ -200,6 +204,8 @@
 	--panel-header: oklch(95% 0.005 264);
 	--toolrail: oklch(96.5% 0.005 264);
 	--divider: oklch(88% 0.006 264);
+
+	--editor-selection: oklch(55% 0.2 255);
 
 	--shadow-panel: 0 1px 2px oklch(0% 0 0 / 0.08);
 	--shadow-popover: 0 8px 24px oklch(0% 0 0 / 0.12), 0 2px 6px oklch(0% 0 0 / 0.08);
