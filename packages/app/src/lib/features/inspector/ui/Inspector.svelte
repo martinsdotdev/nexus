@@ -19,6 +19,7 @@
 		onSetVisible: (id: string, visible: boolean) => void;
 		onSetSceneTheme: (sceneId: string, themeId: string) => void;
 		onSetSceneOverride: (sceneId: string, key: string, value: string) => void;
+		onCustomizeTheme?: () => void;
 	}
 	let {
 		widget,
@@ -27,7 +28,8 @@
 		onSetProp,
 		onSetVisible,
 		onSetSceneTheme,
-		onSetSceneOverride
+		onSetSceneOverride,
+		onCustomizeTheme
 	}: Props = $props();
 
 	const fields = $derived(widget ? propSchemaFor(widget.widgetType) : []);
@@ -158,6 +160,7 @@
 				{/each}
 			</select>
 		</label>
+		<button class="customize" onclick={() => onCustomizeTheme?.()}>Customize theme</button>
 	</div>
 {:else}
 	<p class="empty">Select a widget to edit its properties.</p>
@@ -243,5 +246,17 @@
 		margin: 0;
 		font-size: var(--text-sm);
 		color: var(--muted-foreground);
+	}
+
+	.customize {
+		align-self: flex-start;
+		font: inherit;
+		font-size: var(--text-xs);
+		padding: var(--space-1) var(--space-2);
+		border-radius: var(--radius-md);
+		border: var(--stroke-thin) solid var(--border);
+		background: var(--secondary);
+		color: var(--secondary-foreground);
+		cursor: pointer;
 	}
 </style>

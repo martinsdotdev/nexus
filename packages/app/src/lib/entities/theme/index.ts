@@ -3,3 +3,5 @@
 
 export * from './model/tokens';
 export { resolveThemeStyle, type ResolvedThemeStyle } from './lib/resolve-theme-style';
+export { readBuiltinTokens } from './lib/read-builtin-tokens';
+export { resolveTokenValue, wouldCycle } from './lib/link-graph';

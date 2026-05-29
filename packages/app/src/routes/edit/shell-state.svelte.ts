@@ -33,6 +33,8 @@ export function createShellState() {
 	// (never synced; collaborators select independently). Single-select for now;
 	// the array shape leaves multi-select open without a reshape.
 	let selectedWidgetIds = $state<string[]>([]);
+	// Whether the right panel shows the theme builder instead of the inspector.
+	let themeEditorOpen = $state(false);
 
 	return {
 		get activeToolId() {
@@ -158,6 +160,16 @@ export function createShellState() {
 		},
 		clearSelection() {
 			selectedWidgetIds = [];
+		},
+
+		get themeEditorOpen() {
+			return themeEditorOpen;
+		},
+		openThemeEditor() {
+			themeEditorOpen = true;
+		},
+		closeThemeEditor() {
+			themeEditorOpen = false;
 		}
 	};
 }

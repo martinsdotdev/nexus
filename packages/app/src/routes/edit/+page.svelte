@@ -8,6 +8,7 @@
 	import { createWorkspaceClient, type WorkspaceClient } from '$lib/shared/crdt/client.svelte';
 	import EditorCanvas from '$lib/features/canvas-compose/ui/EditorCanvas.svelte';
 	import Inspector from '$lib/features/inspector/ui/Inspector.svelte';
+	import ThemeBuilder from '$lib/features/theme-builder/ui/ThemeBuilder.svelte';
 
 	const shell = createShellState();
 
@@ -43,6 +44,7 @@
 	const selectedWidget = $derived(
 		activeScene?.widgets.find((widget) => widget.id === shell.selectedWidgetId) ?? null
 	);
+	const customThemes = $derived(workspace?.workspace.customThemes ?? []);
 
 	// Static command list for the prototype. Selecting one just closes the palette.
 	const commands: CommandItem[] = [
@@ -87,15 +89,30 @@
 {/snippet}
 
 {#snippet inspectorBody()}
-	<Inspector
-		widget={selectedWidget}
-		scene={activeScene}
-		onSetGeometry={(id, geom) => workspace?.setWidgetGeometry(id, geom)}
-		onSetProp={(id, key, value) => workspace?.setWidgetProp(id, key, value)}
-		onSetVisible={(id, visible) => workspace?.setWidgetVisible(id, visible)}
-		onSetSceneTheme={(sceneId, themeId) => workspace?.setSceneTheme(sceneId, themeId)}
-		onSetSceneOverride={(sceneId, key, value) => workspace?.setSceneOverride(sceneId, key, value)}
-	/>
+	{#if shell.themeEditorOpen}
+		<ThemeBuilder
+			scene={activeScene}
+			{customThemes}
+			onCreateTheme={(name, base, tokens) => workspace?.createTheme(name, base, tokens) ?? ''}
+			onRenameTheme={(id, name) => workspace?.renameTheme(id, name)}
+			onSetThemeToken={(id, token, value) => workspace?.setThemeToken(id, token, value)}
+			onDeleteTheme={(id) => workspace?.deleteTheme(id)}
+			onExportTheme={(id) => workspace?.exportTheme(id) ?? null}
+			onSetSceneTheme={(sceneId, themeId) => workspace?.setSceneTheme(sceneId, themeId)}
+			onClose={() => shell.closeThemeEditor()}
+		/>
+	{:else}
+		<Inspector
+			widget={selectedWidget}
+			scene={activeScene}
+			onSetGeometry={(id, geom) => workspace?.setWidgetGeometry(id, geom)}
+			onSetProp={(id, key, value) => workspace?.setWidgetProp(id, key, value)}
+			onSetVisible={(id, visible) => workspace?.setWidgetVisible(id, visible)}
+			onSetSceneTheme={(sceneId, themeId) => workspace?.setSceneTheme(sceneId, themeId)}
+			onSetSceneOverride={(sceneId, key, value) => workspace?.setSceneOverride(sceneId, key, value)}
+			onCustomizeTheme={() => shell.openThemeEditor()}
+		/>
+	{/if}
 {/snippet}
 
 <div class="shell" inert={shell.leftDrawerOpen || shell.rightDrawerOpen}>
