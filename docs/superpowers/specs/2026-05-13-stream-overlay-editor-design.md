@@ -622,6 +622,8 @@ The widget is responsible for its own internal layout within its declared `size`
 
 ## 8. Theming system
 
+> **Mechanism superseded by [ADR-0007](../../decisions/0007-pure-data-driven-themes.md)** (which supersedes [ADR-0006](../../decisions/0006-data-driven-custom-themes.md)). Themes are no longer CSS files selected by `[data-theme]`. Every theme, the four built-ins included, is **data** in the workspace doc's `themes` registry; the relay seeds the built-ins as protected entries, and `resolveThemeStyle` applies the resolved tokens as **inline CSS variables** (no `[data-theme]` cascade, no per-theme CSS file, no `evolve`). The token vocabulary in §8.1 below remains accurate and canonical; the *mechanism* described in §8.1–§8.3 (CSS files, `data-theme` swap, evolve) is historical. See the ADR for the current model.
+
 ### 8.1 Themes as CSS files
 
 Each theme is a CSS file that overrides the shared token vocabulary (defined in §12.2) on `[data-theme="<name>"]`. Variable names match the shared schema; only values differ.
@@ -904,6 +906,8 @@ Panel internals adapt to the panel's own width via `@container`, independent of 
 ## 12. Design tokens
 
 ### 12.0 Two token universes
+
+> **Overlay-token mechanism superseded by [ADR-0007](../../decisions/0007-pure-data-driven-themes.md)** (see also the §8 banner). The two-universe model and the shared vocabulary below remain canonical, but the overlay theme tokens no longer live in `themes/<name>.css` files hot-swapped via `[data-theme]` (the "Overlay-runtime theme tokens" row, the alias-tier `themes/*.css` source, and the "Editor universe vs theme universe" note further down). Every theme is registry **data** the relay seeds (built-ins) or the user authors, applied as **inline CSS variables** by `resolveThemeStyle`. The resolver always emits all overlay tokens, which is what keeps the overlay from inheriting the editor universe's identically-named `:root` tokens (there are no per-route stylesheet boundaries between them at runtime).
 
 Nexus has **two distinct token universes**, both CSS-custom-property-driven but with different scope and audience:
 

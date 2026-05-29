@@ -111,13 +111,15 @@ When working on Nexus with AI as the pair-programmer:
 In rough order of urgency for a new agent session:
 
 1. **The design spec**, [`docs/superpowers/specs/2026-05-13-stream-overlay-editor-design.md`](docs/superpowers/specs/2026-05-13-stream-overlay-editor-design.md), the canonical *current state* of the design. ~3,000 lines of structured prose. The spec describes the system as it should be built; it does not describe how we got here.
-2. **The ADR index**, [`docs/decisions/README.md`](docs/decisions/README.md), the *historical* record of decisions, with rationale and rejected alternatives. The spec is "what"; the ADRs are "why." Accepted ADRs as of 2026-05-28:
+2. **The ADR index**, [`docs/decisions/README.md`](docs/decisions/README.md), the *historical* record of decisions, with rationale and rejected alternatives. The spec is "what"; the ADRs are "why." Accepted ADRs as of 2026-05-29:
    - [ADR-0000](docs/decisions/0000-record-architecture-decisions.md), Record architecture decisions (meta-ADR establishing MADR 4.0 + backlog of decisions to backfill).
    - [ADR-0001](docs/decisions/0001-use-rfc-9457-problem-details-for-http-errors.md), Use RFC 9457 Problem Details for HTTP error responses.
    - [ADR-0002](docs/decisions/0002-local-or-cloud-rust-core-with-qubit-rpc.md), Local-or-cloud Rust core with qubit RPC and SvelteKit UI **(superseded by ADR-0005)**.
    - [ADR-0003](docs/decisions/0003-dark-first-pro-creative-tool-editor-aesthetic.md), Dark-first pro-creative-tool editor aesthetic.
    - [ADR-0004](docs/decisions/0004-responsive-editor-shell.md), Responsive editor shell (CSS-owned reflow, container-query panels, off-canvas drawers).
    - [ADR-0005](docs/decisions/0005-offline-collaborative-loro-crdt-trusted-relay.md), Offline-collaborative local-first architecture on Loro CRDT with a trusted sync relay.
+   - [ADR-0006](docs/decisions/0006-data-driven-custom-themes.md), Data-driven custom themes with a hybrid registry and token linking **(superseded by ADR-0007)**.
+   - [ADR-0007](docs/decisions/0007-pure-data-driven-themes.md), Pure data-driven themes (every theme is registry data; built-ins are seeded as protected entries).
 3. **The FSD skill**, [`.agents/skills/feature-sliced-design/SKILL.md`](.agents/skills/feature-sliced-design/SKILL.md), official Feature-Sliced Design v2.1 with practical guidance. Read when placing new code. Version pinned via [`skills-lock.json`](skills-lock.json) at the project root.
 4. **The original prototype**, [`project/Stream Overlay.html`](project/Stream Overlay.html) + the 8 JSX modules in [`project/`](project/), the design-medium artifact that started this. React + Babel-in-browser. The visual design is canonical; the implementation is throwaway prototype quality.
 5. **The handoff chat**, [`chats/chat1.md`](chats/chat1.md), the original design conversation that produced the prototype.
