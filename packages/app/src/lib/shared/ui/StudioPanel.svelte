@@ -73,6 +73,10 @@
 		display: flex;
 		flex-direction: column;
 		min-width: var(--panel-min-width);
+		/* Allow the panel to be capped to its container's height (the dock row or the
+		   drawer) so its body, not the panel, owns the scroll when content is tall. */
+		min-height: 0;
+		max-height: 100%;
 		background: var(--card);
 		color: var(--card-foreground);
 		border-radius: var(--radius-lg);
@@ -155,6 +159,9 @@
 
 	.panel-body {
 		flex: 1;
+		/* min-height:0 lets this flex child shrink below its content so overflow:auto
+		   actually scrolls rather than expanding the panel past its bounds. */
+		min-height: 0;
 		padding: var(--space-3);
 		overflow: auto;
 		font-size: var(--text-sm);

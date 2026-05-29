@@ -308,6 +308,10 @@
 	.dock {
 		display: flex;
 		padding: var(--space-2);
+		/* Cap the dock to its grid row so a tall panel (e.g. the theme builder's
+		   full token rail) scrolls inside the panel body instead of overflowing. */
+		min-height: 0;
+		min-width: 0;
 	}
 
 	.dock-left {
