@@ -1,20 +1,16 @@
 <script lang="ts">
-	import { m } from '$lib/paraglide/messages';
+	interface Scene {
+		id: string;
+		label: string;
+	}
 
 	interface Props {
+		scenes: Scene[];
 		activeSceneId: string;
 		onSelect: (id: string) => void;
 	}
 
-	let { activeSceneId, onSelect }: Props = $props();
-
-	// Maps to Nexus scenes (the Resolve-style page strip).
-	const scenes = [
-		{ id: 'live', label: m['editor.scene.live']() },
-		{ id: 'starting_soon', label: m['editor.scene.starting_soon']() },
-		{ id: 'brb', label: m['editor.scene.brb']() },
-		{ id: 'ending', label: m['editor.scene.ending']() }
-	];
+	let { scenes, activeSceneId, onSelect }: Props = $props();
 </script>
 
 <footer class="scenestrip" aria-label="Scenes">

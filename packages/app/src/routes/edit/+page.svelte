@@ -5,8 +5,33 @@
 	import TitleBar from './TitleBar.svelte';
 	import ToolRail from './ToolRail.svelte';
 	import SceneStrip from './SceneStrip.svelte';
+	import { createWorkspaceClient, type WorkspaceClient } from '$lib/shared/crdt/client.svelte';
 
 	const shell = createShellState();
+
+	// The collaborative workspace lives in a local Loro replica synced to the
+	// relay. Created in an $effect (client-only) since it touches WASM + WebSocket;
+	// the scene strip reads scenes + active scene from it. See ADR-0005.
+	const sceneLabels: Record<string, () => string> = {
+		live: m['editor.scene.live'],
+		starting_soon: m['editor.scene.starting_soon'],
+		brb: m['editor.scene.brb'],
+		ending: m['editor.scene.ending']
+	};
+	let workspace = $state<WorkspaceClient | null>(null);
+	$effect(() => {
+		const url = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/sync`;
+		const client = createWorkspaceClient(url);
+		workspace = client;
+		return () => client.dispose();
+	});
+	const sceneCards = $derived(
+		(workspace?.scenes ?? []).map((scene) => ({
+			id: scene.id,
+			label: sceneLabels[scene.kind]?.() ?? scene.kind
+		}))
+	);
+	const activeSceneId = $derived(workspace?.activeSceneId ?? '');
 
 	// Static command list for the prototype. Selecting one just closes the palette.
 	const commands: CommandItem[] = [
@@ -98,7 +123,7 @@
 		</StudioPanel>
 	</div>
 
-	<SceneStrip activeSceneId={shell.activeSceneId} onSelect={(id) => shell.setActiveScene(id)} />
+	<SceneStrip scenes={sceneCards} {activeSceneId} onSelect={(id) => workspace?.activate(id)} />
 </div>
 
 <!-- Off-canvas drawers live OUTSIDE .shell so the inert binding above never disables

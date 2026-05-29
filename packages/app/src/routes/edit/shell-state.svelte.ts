@@ -29,7 +29,6 @@ export function createShellState() {
 	let rightDrawerOpen = $state(false);
 	let viewportMode = $state<ViewportMode>('wide');
 	let paletteOpen = $state(false);
-	let activeSceneId = $state('live');
 
 	return {
 		get activeToolId() {
@@ -139,13 +138,6 @@ export function createShellState() {
 		},
 		closePalette() {
 			paletteOpen = false;
-		},
-
-		get activeSceneId() {
-			return activeSceneId;
-		},
-		setActiveScene(id: string) {
-			activeSceneId = id;
 		}
 	};
 }
