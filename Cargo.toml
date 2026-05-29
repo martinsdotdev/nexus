@@ -1,0 +1,26 @@
+[workspace]
+resolver = "3"
+members = ["crates/*"]
+
+[workspace.package]
+edition = "2024"
+version = "0.0.1"
+
+# Central version pins for the Rust workspace. A crate opts into a dependency
+# with `<name>.workspace = true`; unreferenced entries are not built. See ADR-0005.
+[workspace.dependencies]
+nexus-core = { path = "crates/nexus-core" }
+loro = "1.10"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+anyhow = "1"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "net", "time"] }
+axum = { version = "0.8", features = ["ws"] }
+tower-http = { version = "0.6", features = ["fs"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+clap = { version = "4", features = ["derive"] }
+figment = { version = "0.10", features = ["env"] }
+dirs = "6"
+tempfile = "3"

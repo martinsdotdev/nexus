@@ -1,0 +1,8 @@
+[package]
+name = "nexus-server"
+description = "Nexus trusted sync relay: WebSocket Loro sync, validate/repair, persist, rebroadcast."
+edition.workspace = true
+version.workspace = true
+
+[dependencies]
+anyhow.workspace = true

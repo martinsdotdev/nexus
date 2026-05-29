@@ -1,0 +1,8 @@
+[package]
+name = "nexus-core"
+description = "Nexus hexagonal core: Loro-backed workspace document, validator, ports."
+edition.workspace = true
+version.workspace = true
+
+[dependencies]
+loro.workspace = true
