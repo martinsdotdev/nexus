@@ -9,6 +9,13 @@
 	import { WIDGET_REGISTRY } from '$lib/entities/widget';
 	import { resolveThemeStyle } from '$lib/entities/theme';
 	import { createEventBus } from '$lib/shared/events/event-bus';
+	// The canvas is a true overlay preview, so it needs the built-in theme
+	// stylesheets ([data-theme=...] cascades) the editor route does not otherwise
+	// load. They are scoped by [data-theme], so they never touch the editor chrome.
+	import '$lib/shared/styles/themes/cozy.css';
+	import '$lib/shared/styles/themes/cyber.css';
+	import '$lib/shared/styles/themes/editorial.css';
+	import '$lib/shared/styles/themes/sticker.css';
 	import { fitScale, VIRTUAL_H, VIRTUAL_W } from '../model/geometry';
 	import SelectionOverlay from './SelectionOverlay.svelte';
 
