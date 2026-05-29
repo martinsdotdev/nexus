@@ -8,6 +8,8 @@ pub const TREE: &str = "tree";
 /// Root `LoroMap` holding workspace-level pointers (`activeLayoutId`, ...).
 pub const WORKSPACE: &str = "workspace";
 
-/// Root `LoroMap` of user-authored custom themes (ADR-0006), keyed by a
-/// client-minted unique id. Each value is a map of `{ name, base, tokens }`.
+/// Root `LoroMap` of the theme registry (ADR-0007): the relay seeds the built-ins
+/// as `protected` entries with stable ids (`cozy`/`cyber`/`editorial`/`sticker`),
+/// and user themes are added with client-minted `theme-<uuid>` ids. Each value is
+/// a map of `{ name, base, protected, tokens }`.
 pub const THEMES: &str = "themes";

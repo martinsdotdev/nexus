@@ -15,12 +15,15 @@ pub struct Workspace {
     pub themes: Vec<ThemeDef>,
 }
 
-/// A user-authored custom theme stored in the workspace doc (ADR-0006).
+/// A theme stored in the workspace doc (ADR-0007). Built-ins are seeded at first
+/// run with `protected = true` (editable in place, but undeletable so the default
+/// fallback always exists); user themes are minted with `protected = false`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ThemeDef {
     pub id: String,
     pub name: String,
     pub base: String,
+    pub protected: bool,
     pub tokens: BTreeMap<String, String>,
 }
 
@@ -95,8 +98,9 @@ pub fn read_workspace(doc: &LoroDoc) -> Workspace {
     }
 }
 
-/// Read the custom-theme registry (root "themes" map) into the read model. Total:
-/// a missing or malformed registry yields no themes. Sorted by id for determinism.
+/// Read the theme registry (root "themes" map: the seeded built-ins plus user
+/// themes alike, ADR-0007) into the read model. Total: a missing or malformed
+/// registry yields no themes. Sorted by id for determinism.
 fn read_themes(doc: &LoroDoc) -> Vec<ThemeDef> {
     let LoroValue::Map(entries) = doc.get_map(schema::THEMES).get_deep_value() else {
         return Vec::new();
@@ -118,6 +122,7 @@ fn read_themes(doc: &LoroDoc) -> Vec<ThemeDef> {
                 id: id.to_string(),
                 name: theme.get("name").map(value_str).unwrap_or_default(),
                 base: theme.get("base").map(value_str).unwrap_or_default(),
+                protected: matches!(theme.get("protected"), Some(LoroValue::Bool(true))),
                 tokens,
             })
         })
@@ -167,6 +172,15 @@ mod tests {
         let themes: Vec<&str> = layout.scenes.iter().map(|s| s.theme_id.as_str()).collect();
         assert_eq!(themes, ["cozy", "cyber", "editorial", "sticker"]);
 
+        // ADR-0007: every scene's theme resolves to a seeded registry entry.
+        let registry: Vec<&str> = ws.themes.iter().map(|t| t.id.as_str()).collect();
+        for theme in themes {
+            assert!(
+                registry.contains(&theme),
+                "scene theme {theme} is in the registry"
+            );
+        }
+
         // The live scene is seeded with the eight v1 widgets.
         let tree = doc.get_tree(schema::TREE);
         let live = tree.children(tree.roots()[0]).unwrap()[0];
@@ -177,5 +191,25 @@ mod tests {
             .filter(|node| map_str(&tree.get_meta(*node).unwrap(), "type") == "widget")
             .count();
         assert_eq!(widget_count, 8);
+    }
+
+    #[test]
+    fn seeds_the_four_builtin_themes_into_the_registry() {
+        let doc = LoroDoc::new();
+        build_default(&doc).unwrap();
+        let ws = read_workspace(&doc);
+
+        let ids: Vec<&str> = ws.themes.iter().map(|t| t.id.as_str()).collect();
+        assert_eq!(ids, ["cozy", "cyber", "editorial", "sticker"]);
+        for theme in &ws.themes {
+            assert!(theme.protected, "{} is protected from deletion", theme.id);
+            assert_eq!(
+                theme.tokens.len(),
+                33,
+                "{} carries the full vocabulary",
+                theme.id
+            );
+            assert!(theme.base.is_empty(), "{} stands alone, no base", theme.id);
+        }
     }
 }

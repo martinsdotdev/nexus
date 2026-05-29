@@ -5,6 +5,7 @@
 //! would mint divergent `TreeID`s that duplicate on merge (see ADR-0005 / the
 //! plan, trap T1).
 
+use crate::builtin_themes::BUILTIN_THEMES;
 use crate::schema;
 use loro::{LoroDoc, LoroMap, LoroTree, TreeID};
 
@@ -41,12 +42,32 @@ pub fn build_default(doc: &LoroDoc) -> loro::LoroResult<()> {
     layout_meta.insert("activeSceneId", live_scene.to_string())?;
 
     seed_default_widgets(&tree, live_scene)?;
+    seed_builtin_themes(doc)?;
 
     let workspace = doc.get_map(schema::WORKSPACE);
     workspace.insert("activeLayoutId", layout.to_string())?;
     workspace.insert("schemaVersion", 1)?;
 
     doc.commit();
+    Ok(())
+}
+
+/// Seed the built-in themes into the root "themes" registry (ADR-0007). Each is a
+/// nested map `{ name, base, protected, tokens }`; built-ins carry no base (they
+/// stand alone) and are `protected` so a user cannot delete the default fallback.
+/// Done only here, on the relay, so the stable ids never collide on merge (T1).
+fn seed_builtin_themes(doc: &LoroDoc) -> loro::LoroResult<()> {
+    let registry = doc.get_map(schema::THEMES);
+    for theme in BUILTIN_THEMES {
+        let entry = registry.insert_container(theme.id, LoroMap::new())?;
+        entry.insert("name", theme.name)?;
+        entry.insert("base", "")?;
+        entry.insert("protected", true)?;
+        let tokens = entry.insert_container("tokens", LoroMap::new())?;
+        for &(key, value) in theme.tokens {
+            tokens.insert(key, value)?;
+        }
+    }
     Ok(())
 }
 
@@ -125,5 +146,18 @@ mod tests {
 
         let scenes = tree.children(layouts[0]).expect("the layout has children");
         assert_eq!(scenes.len(), 4, "four scenes under the layout");
+    }
+
+    #[test]
+    fn seeds_the_builtin_theme_registry() {
+        let doc = LoroDoc::new();
+        build_default(&doc).unwrap();
+
+        let registry = doc.get_map(schema::THEMES);
+        assert_eq!(
+            registry.len(),
+            4,
+            "four built-in themes seeded into the registry"
+        );
     }
 }

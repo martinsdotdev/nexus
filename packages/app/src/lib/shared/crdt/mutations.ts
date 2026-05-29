@@ -88,13 +88,21 @@ export function setSceneOverride(doc: LoroDoc, sceneId: string, key: string, val
 	nodeById(doc, sceneId)?.data.set(key, value);
 }
 
-// --- Custom theme registry (root "themes" map of nested theme maps) ----------
-// Theme ids are caller-minted (unique, never names) so two themes named the same
-// never collide on merge (trap T1). Token values are literals or `link:<token>`.
+// --- Theme registry (root "themes" map of nested theme maps) -----------------
+// The relay seeds the built-ins here as `protected` (ADR-0007); user themes are
+// added with caller-minted ids (unique, never names) so two themes named the
+// same never collide on merge (trap T1). Token values are literals or
+// `link:<token>`.
 
 function themeContainer(doc: LoroDoc, id: string): LoroMap | undefined {
 	const container = doc.getMap(THEMES).get(id);
 	return container instanceof LoroMap ? container : undefined;
+}
+
+/** True when `id` names a protected (built-in) theme: its tokens are the
+ *  link-free literal floor a derived theme may inherit from. */
+function isProtected(doc: LoroDoc, id: string): boolean {
+	return themeContainer(doc, id)?.get('protected') === true;
 }
 
 export function createTheme(
@@ -106,7 +114,12 @@ export function createTheme(
 ): void {
 	const theme = doc.getMap(THEMES).setContainer(id, new LoroMap());
 	theme.set('name', name);
-	theme.set('base', base);
+	// A theme may only derive from a protected built-in (whose literals are a
+	// guaranteed-resolvable inheritance floor); any other base falls back to the
+	// default theme at resolve time. This keeps base single-level and cycle-free.
+	theme.set('base', isProtected(doc, base) ? base : '');
+	// User themes are never protected; only the relay seeds protected built-ins.
+	theme.set('protected', false);
 	const tokenMap = theme.setContainer('tokens', new LoroMap());
 	for (const [key, value] of Object.entries(tokens)) tokenMap.set(key, value);
 }
@@ -115,13 +128,21 @@ export function renameTheme(doc: LoroDoc, id: string, name: string): void {
 	themeContainer(doc, id)?.set('name', name);
 }
 
-/** Set one token's value (a literal or a `link:<token>` reference). */
+/** Set one token's value (a literal or a `link:<token>` reference). A protected
+ *  (built-in) theme accepts literals only, never a `link:` value, so it stays a
+ *  fully-resolvable floor for the resolver and for any theme that derives from it. */
 export function setThemeToken(doc: LoroDoc, id: string, token: string, value: string): void {
-	const tokens = themeContainer(doc, id)?.get('tokens');
+	const container = themeContainer(doc, id);
+	if (!container) return;
+	if (container.get('protected') === true && value.startsWith('link:')) return;
+	const tokens = container.get('tokens');
 	if (tokens instanceof LoroMap) tokens.set(token, value);
 }
 
+/** Delete a user theme. Protected (built-in) themes are kept so the default
+ *  fallback always exists; the builder also hides Delete for them. */
 export function deleteTheme(doc: LoroDoc, id: string): void {
+	if (themeContainer(doc, id)?.get('protected') === true) return;
 	doc.getMap(THEMES).delete(id);
 }
 

@@ -2,7 +2,14 @@ import { expect, test, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import { page } from 'vitest/browser';
 import Inspector from './Inspector.svelte';
-import type { SceneView, WidgetView } from '$lib/shared/crdt/workspace-view';
+import type { SceneView, Theme, WidgetView } from '$lib/shared/crdt/workspace-view';
+
+// The scene-theme dropdown lists the registry themes by name (ADR-0007), so the
+// option a test selects must exist.
+const themes: Theme[] = [
+	{ id: 'cozy', name: 'Cozy', base: '', protected: true, tokens: {} },
+	{ id: 'cyber', name: 'Cyber', base: '', protected: true, tokens: {} }
+];
 
 const widget = (): WidgetView => ({
 	id: 'w1',
@@ -45,7 +52,7 @@ async function spinbutton(name: string) {
 
 test('editing a text prop reports the new value', async () => {
 	const h = handlers();
-	render(Inspector, { widget: widget(), scene: null, customThemes: [], ...h });
+	render(Inspector, { widget: widget(), scene: null, themes, ...h });
 	const el = await input('Title');
 	el.value = 'New Title';
 	el.dispatchEvent(new Event('input', { bubbles: true }));
@@ -54,7 +61,7 @@ test('editing a text prop reports the new value', async () => {
 
 test('editing X reports the geometry change', async () => {
 	const h = handlers();
-	render(Inspector, { widget: widget(), scene: null, customThemes: [], ...h });
+	render(Inspector, { widget: widget(), scene: null, themes, ...h });
 	const el = await spinbutton('X');
 	el.value = '100';
 	el.dispatchEvent(new Event('input', { bubbles: true }));
@@ -63,14 +70,14 @@ test('editing X reports the geometry change', async () => {
 
 test('toggling visibility reports it', async () => {
 	const h = handlers();
-	render(Inspector, { widget: widget(), scene: null, customThemes: [], ...h });
+	render(Inspector, { widget: widget(), scene: null, themes, ...h });
 	await page.getByRole('checkbox', { name: 'Visible' }).click();
 	expect(h.onSetVisible).toHaveBeenCalledWith('w1', false);
 });
 
 test('with no widget, changing the scene theme reports it', async () => {
 	const h = handlers();
-	render(Inspector, { widget: null, scene: scene(), customThemes: [], ...h });
+	render(Inspector, { widget: null, scene: scene(), themes, ...h });
 	const select = (await page
 		.getByRole('combobox', { name: 'Theme' })
 		.element()) as HTMLSelectElement;

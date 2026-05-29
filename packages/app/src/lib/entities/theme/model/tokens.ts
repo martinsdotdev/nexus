@@ -1,15 +1,13 @@
 // The overlay theme token vocabulary (spec §8.1 / §12.2): the CSS custom
 // properties every overlay widget reads via var(--token). A theme assigns a
-// value to each token. Built-in themes (cozy/cyber/editorial/sticker) ship as
-// CSS files; a CUSTOM theme (ADR-0006) stores its values as data in the
-// workspace doc. A token value is either a literal (e.g. `oklch(70% 0.15 50)`)
-// or a `link:<token>` reference that resolves to another token's value.
+// value to each token. Every theme is data in the workspace doc (ADR-0007): the
+// relay seeds the built-ins (cozy/cyber/editorial/sticker) as protected entries;
+// users author the rest. A token value is either a literal (e.g.
+// `oklch(70% 0.15 50)`) or a `link:<token>` reference that resolves to another.
 
-export const BUILTIN_THEME_IDS = ['cozy', 'cyber', 'editorial', 'sticker'] as const;
-export type BuiltinThemeId = (typeof BUILTIN_THEME_IDS)[number];
-
-/** Fallback when a scene names a theme that no longer exists. */
-export const DEFAULT_THEME_ID: BuiltinThemeId = 'cozy';
+/** The id of the seeded default theme: the resolver's safety floor and the
+ *  fallback a dangling scene reference is repaired to (mirrors nexus-core). */
+export const DEFAULT_THEME_ID = 'cozy';
 
 /** A token value of the form `link:<token>` aliases another token. */
 export const LINK_PREFIX = 'link:';
@@ -77,8 +75,4 @@ export const NON_COLOR_TOKENS = new Set([
 /** A token gets a color picker in the builder unless it is a non-color token. */
 export function isColorToken(token: string): boolean {
 	return !NON_COLOR_TOKENS.has(token);
-}
-
-export function isBuiltinTheme(id: string): id is BuiltinThemeId {
-	return (BUILTIN_THEME_IDS as readonly string[]).includes(id);
 }

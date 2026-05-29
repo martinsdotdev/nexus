@@ -1,65 +1,83 @@
 import { describe, expect, test } from 'vitest';
 import { resolveThemeStyle } from './resolve-theme-style';
-import type { CustomTheme } from '$lib/shared/crdt/workspace-view';
+import type { Theme } from '$lib/shared/crdt/workspace-view';
 
-const custom = (tokens: Record<string, string>, base = 'cyber'): CustomTheme => ({
-	id: 'theme-x',
-	name: 'X',
+const theme = (id: string, tokens: Record<string, string>, base = ''): Theme => ({
+	id,
+	name: id,
 	base,
+	protected: false,
 	tokens
 });
 
+// A stand-in for the seeded default theme (the resolver's safety floor).
+const cozy = theme('cozy', {
+	primary: 'cozy-primary',
+	background: 'cozy-bg',
+	accent: 'cozy-accent'
+});
+
 describe('resolveThemeStyle', () => {
-	test('a built-in id maps to data-theme with no inline vars', () => {
-		const r = resolveThemeStyle('cozy', []);
-		expect(r.dataTheme).toBe('cozy');
-		expect(r.inlineVars).toBe('');
-	});
-
-	test('an accent override on a built-in inlines only --accent', () => {
-		const r = resolveThemeStyle('cozy', [], 'oklch(70% 0.2 30)');
-		expect(r.dataTheme).toBe('cozy');
-		expect(r.inlineVars).toContain('--accent: oklch(70% 0.2 30)');
-	});
-
-	test('an empty accent override is ignored', () => {
-		expect(resolveThemeStyle('cozy', [], '').inlineVars).toBe('');
-	});
-
-	test('a custom theme uses its base as data-theme and inlines its tokens', () => {
-		const r = resolveThemeStyle('theme-x', [custom({ primary: 'red', background: 'blue' })]);
-		expect(r.dataTheme).toBe('cyber');
+	test("inlines the selected theme's tokens as CSS variables", () => {
+		const r = resolveThemeStyle('t', [theme('t', { primary: 'red', background: 'blue' })]);
 		expect(r.inlineVars).toContain('--primary: red;');
 		expect(r.inlineVars).toContain('--background: blue;');
 	});
 
+	test('an accent override replaces the theme accent and is emitted exactly once', () => {
+		const r = resolveThemeStyle('t', [theme('t', { accent: 'green' })], 'purple');
+		expect(r.inlineVars).toContain('--accent: purple;');
+		expect(r.inlineVars).not.toContain('green');
+		expect(r.inlineVars.match(/--accent:/g)?.length).toBe(1);
+	});
+
+	test('an empty accent override is ignored', () => {
+		const r = resolveThemeStyle('t', [theme('t', { accent: 'green' })], '');
+		expect(r.inlineVars).not.toContain('purple');
+		expect(r.inlineVars).toContain('--accent: green;');
+	});
+
 	test('a link token resolves to its target value', () => {
-		const r = resolveThemeStyle('theme-x', [custom({ primary: 'red', ring: 'link:primary' })]);
+		const r = resolveThemeStyle('t', [theme('t', { primary: 'red', ring: 'link:primary' })]);
 		expect(r.inlineVars).toContain('--ring: red;');
 	});
 
-	test('a link cycle resolves safely without looping or emitting the cyclic tokens', () => {
-		const r = resolveThemeStyle('theme-x', [
-			custom({ primary: 'link:accent', accent: 'link:primary' })
+	test('a link cycle is dropped without looping (no default floor present)', () => {
+		const r = resolveThemeStyle('t', [
+			theme('t', { primary: 'link:accent', accent: 'link:primary' })
 		]);
 		expect(r.inlineVars).not.toContain('--primary:');
 		expect(r.inlineVars).not.toContain('--accent:');
 	});
 
-	test('a dangling link is skipped (the base CSS covers it)', () => {
-		const r = resolveThemeStyle('theme-x', [custom({ ring: 'link:nonexistent' })]);
-		expect(r.inlineVars).not.toContain('--ring:');
+	test('an unset token inherits from the theme base', () => {
+		const base = theme('cyber', { primary: 'cyber-primary', background: 'cyber-bg' });
+		const derived = theme('t', { primary: 'override' }, 'cyber');
+		const r = resolveThemeStyle('t', [base, derived]);
+		expect(r.inlineVars).toContain('--primary: override;'); // own value wins
+		expect(r.inlineVars).toContain('--background: cyber-bg;'); // inherited from base
 	});
 
-	test('an accent override wins over a custom theme accent token', () => {
-		const r = resolveThemeStyle('theme-x', [custom({ accent: 'green' })], 'purple');
-		expect(r.inlineVars.lastIndexOf('--accent: purple')).toBeGreaterThan(
-			r.inlineVars.indexOf('--accent: green')
-		);
+	test('an unset token falls back to the default theme when no base covers it', () => {
+		const derived = theme('t', { primary: 'override' }); // no base
+		const r = resolveThemeStyle('t', [cozy, derived]);
+		expect(r.inlineVars).toContain('--primary: override;');
+		expect(r.inlineVars).toContain('--background: cozy-bg;'); // default floor
 	});
 
-	test('an unknown theme id falls back to the default built-in', () => {
-		const r = resolveThemeStyle('theme-missing', []);
-		expect(r.dataTheme).toBe('cozy');
+	test('a dangling link falls back to the default theme literal', () => {
+		const derived = theme('t', { background: 'link:nonexistent' });
+		const r = resolveThemeStyle('t', [cozy, derived]);
+		expect(r.inlineVars).toContain('--background: cozy-bg;');
+	});
+
+	test('an unknown theme id falls back to the default theme', () => {
+		const r = resolveThemeStyle('missing', [cozy]);
+		expect(r.inlineVars).toContain('--background: cozy-bg;');
+		expect(r.inlineVars).toContain('--primary: cozy-primary;');
+	});
+
+	test('an empty registry yields no inline vars (transient pre-sync state)', () => {
+		expect(resolveThemeStyle('cozy', []).inlineVars).toBe('');
 	});
 });

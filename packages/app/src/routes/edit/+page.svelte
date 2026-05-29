@@ -51,7 +51,7 @@
 	const selectedWidget = $derived(
 		activeScene?.widgets.find((widget) => widget.id === shell.selectedWidgetId) ?? null
 	);
-	const customThemes = $derived(workspace?.workspace.customThemes ?? []);
+	const themes = $derived(workspace?.workspace.themes ?? []);
 
 	// The command palette's commands; runCommand dispatches by id.
 	const commands: CommandItem[] = [
@@ -190,7 +190,7 @@
 	{#if shell.themeEditorOpen}
 		<ThemeBuilder
 			scene={activeScene}
-			{customThemes}
+			{themes}
 			onCreateTheme={(name, base, tokens) => workspace?.createTheme(name, base, tokens) ?? ''}
 			onRenameTheme={(id, name) => workspace?.renameTheme(id, name)}
 			onSetThemeToken={(id, token, value) => workspace?.setThemeToken(id, token, value)}
@@ -203,7 +203,7 @@
 		<Inspector
 			widget={selectedWidget}
 			scene={activeScene}
-			{customThemes}
+			{themes}
 			onSetGeometry={(id, geom) => workspace?.setWidgetGeometry(id, geom)}
 			onSetProp={(id, key, value) => workspace?.setWidgetProp(id, key, value)}
 			onSetVisible={(id, visible) => workspace?.setWidgetVisible(id, visible)}

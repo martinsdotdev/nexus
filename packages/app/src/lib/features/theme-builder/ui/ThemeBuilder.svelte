@@ -1,26 +1,25 @@
 <script lang="ts">
-	// The Zed-style theme builder: assign the active scene's theme, duplicate a
-	// built-in into an editable custom theme, edit the full token set (grouped),
-	// link a token to another (cycle-guarded), and import/export. The editor
-	// canvas is the live preview. Presentational: every change is a callback the
-	// page wires to the Loro client. Editor chrome (editor tokens).
-	import type { CustomTheme, SceneView, ThemeTokens } from '$lib/shared/crdt/workspace-view';
+	// The Zed-style theme builder: assign the active scene's theme, edit any
+	// theme's full token set in place (grouped), link a token to another (cycle-
+	// guarded), duplicate a theme into an editable fork, and import/export. Every
+	// theme is registry data now (ADR-0007), so built-ins are editable too; they
+	// are `protected` (Delete hidden) so the default fallback always exists. The
+	// editor canvas is the live preview. Presentational: every change is a callback
+	// the page wires to the Loro client. Editor chrome (editor tokens).
+	import type { Theme, SceneView, ThemeTokens } from '$lib/shared/crdt/workspace-view';
 	import {
-		BUILTIN_THEME_IDS,
 		DEFAULT_THEME_ID,
 		LINK_PREFIX,
 		THEME_TOKENS,
 		TOKEN_GROUPS,
-		isBuiltinTheme,
 		isColorToken,
-		readBuiltinTokens,
 		resolveTokenValue,
 		wouldCycle
 	} from '$lib/entities/theme';
 
 	interface Props {
 		scene: SceneView | null;
-		customThemes: CustomTheme[];
+		themes: Theme[];
 		onCreateTheme: (name: string, base: string, tokens: ThemeTokens) => string;
 		onRenameTheme: (id: string, name: string) => void;
 		onSetThemeToken: (id: string, token: string, value: string) => void;
@@ -31,7 +30,7 @@
 	}
 	let {
 		scene,
-		customThemes,
+		themes,
 		onCreateTheme,
 		onRenameTheme,
 		onSetThemeToken,
@@ -42,7 +41,7 @@
 	}: Props = $props();
 
 	const activeThemeId = $derived(scene?.themeId ?? '');
-	const activeCustom = $derived(customThemes.find((theme) => theme.id === activeThemeId) ?? null);
+	const activeTheme = $derived(themes.find((theme) => theme.id === activeThemeId) ?? null);
 
 	let importText = $state('');
 
@@ -51,27 +50,29 @@
 		return value?.startsWith(LINK_PREFIX) ? value.slice(LINK_PREFIX.length) : '';
 	};
 
-	function duplicateToCustomize() {
-		if (!scene) return;
-		const base = isBuiltinTheme(activeThemeId) ? activeThemeId : DEFAULT_THEME_ID;
-		const id = onCreateTheme(`${base} custom`, base, readBuiltinTokens(base));
+	// Duplicate the active theme into a new, editable, deletable copy and assign it.
+	// The copy derives from a protected built-in (if the source is one, inherit it;
+	// otherwise carry the source's built-in base) so it keeps a resolvable floor.
+	function duplicateTheme() {
+		if (!scene || !activeTheme) return;
+		const base = activeTheme.protected ? activeTheme.id : activeTheme.base;
+		const id = onCreateTheme(`${activeTheme.name} copy`, base, { ...activeTheme.tokens });
 		onSetSceneTheme(scene.id, id);
 	}
 
-	function changeLink(theme: CustomTheme, token: string, target: string) {
+	function changeLink(theme: Theme, token: string, target: string) {
 		if (target === '') {
 			// Unlink: freeze the token at its currently-resolved literal. If the chain
-			// was dangling/cyclic (resolves to ''), fall back to the base built-in's
-			// value so we never write an empty token.
-			const resolved =
-				resolveTokenValue(theme.tokens, token) || readBuiltinTokens(theme.base)[token];
+			// is dangling/cyclic (resolves to ''), leave the link for resolveThemeStyle
+			// to fall back on the default theme rather than writing an empty token.
+			const resolved = resolveTokenValue(theme.tokens, token);
 			if (resolved) onSetThemeToken(theme.id, token, resolved);
 		} else if (!wouldCycle(theme.tokens, token, target)) {
 			onSetThemeToken(theme.id, token, `${LINK_PREFIX}${target}`);
 		}
 	}
 
-	function exportActive(theme: CustomTheme) {
+	function exportActive(theme: Theme) {
 		const data = onExportTheme(theme.id);
 		if (!data) return;
 		const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
@@ -83,9 +84,9 @@
 		URL.revokeObjectURL(url);
 	}
 
-	function deleteActive(theme: CustomTheme) {
+	function deleteActive(theme: Theme) {
 		if (!scene) return;
-		const fallback = isBuiltinTheme(theme.base) ? theme.base : DEFAULT_THEME_ID;
+		const fallback = themes.some((t) => t.id === theme.base) ? theme.base : DEFAULT_THEME_ID;
 		onDeleteTheme(theme.id);
 		onSetSceneTheme(scene.id, fallback);
 	}
@@ -94,7 +95,7 @@
 		if (!scene) return;
 		try {
 			const parsed = JSON.parse(importText);
-			const base = isBuiltinTheme(String(parsed.base)) ? String(parsed.base) : DEFAULT_THEME_ID;
+			const base = themes.some((t) => t.id === String(parsed.base)) ? String(parsed.base) : '';
 			const tokens =
 				parsed.tokens && typeof parsed.tokens === 'object'
 					? (parsed.tokens as ThemeTokens)
@@ -119,17 +120,14 @@
 		<label class="field">
 			<span>Scene theme</span>
 			<select value={activeThemeId} onchange={(e) => onSetSceneTheme(s.id, e.currentTarget.value)}>
-				{#each BUILTIN_THEME_IDS as id (id)}
-					<option value={id}>{id}</option>
-				{/each}
-				{#each customThemes as theme (theme.id)}
+				{#each themes as theme (theme.id)}
 					<option value={theme.id}>{theme.name}</option>
 				{/each}
 			</select>
 		</label>
 
-		{#if activeCustom}
-			{@const ac = activeCustom}
+		{#if activeTheme}
+			{@const ac = activeTheme}
 			<label class="field">
 				<span>Name</span>
 				<input
@@ -139,9 +137,17 @@
 				/>
 			</label>
 			<div class="actions">
+				<button class="ghost" onclick={duplicateTheme}>Duplicate</button>
 				<button class="ghost" onclick={() => exportActive(ac)}>Export</button>
-				<button class="ghost danger" onclick={() => deleteActive(ac)}>Delete</button>
+				{#if !ac.protected}
+					<button class="ghost danger" onclick={() => deleteActive(ac)}>Delete</button>
+				{/if}
 			</div>
+			{#if ac.protected}
+				<p class="hint">
+					Built-in theme: edits apply in place. Duplicate to fork a deletable copy.
+				</p>
+			{/if}
 
 			{#each TOKEN_GROUPS as group (group.label)}
 				<details open>
@@ -165,17 +171,20 @@
 									oninput={(e) => onSetThemeToken(ac.id, token, e.currentTarget.value)}
 								/>
 							{/if}
-							<select
-								class="link-select"
-								value={linked}
-								aria-label="Link {token}"
-								onchange={(e) => changeLink(ac, token, e.currentTarget.value)}
-							>
-								<option value="">(literal)</option>
-								{#each THEME_TOKENS.filter((other) => other !== token) as other (other)}
-									<option value={other}>{other}</option>
-								{/each}
-							</select>
+							{#if !ac.protected}
+								<!-- Built-ins hold literals only (the resolver's floor), so no link control. -->
+								<select
+									class="link-select"
+									value={linked}
+									aria-label="Link {token}"
+									onchange={(e) => changeLink(ac, token, e.currentTarget.value)}
+								>
+									<option value="">(literal)</option>
+									{#each THEME_TOKENS.filter((other) => other !== token) as other (other)}
+										<option value={other}>{other}</option>
+									{/each}
+								</select>
+							{/if}
 						</div>
 					{/each}
 				</details>
@@ -187,8 +196,7 @@
 				<button class="ghost" onclick={importTheme}>Import as new theme</button>
 			</details>
 		{:else}
-			<p class="hint">This scene uses a built-in theme. Duplicate it to edit its tokens.</p>
-			<button class="primary" onclick={duplicateToCustomize}>Duplicate to customize</button>
+			<p class="hint">This scene's theme is not in the registry.</p>
 		{/if}
 	{:else}
 		<p class="hint">No active scene.</p>
@@ -237,12 +245,6 @@
 		background: var(--secondary);
 		color: var(--secondary-foreground);
 		cursor: pointer;
-	}
-
-	button.primary {
-		background: var(--primary);
-		color: var(--primary-foreground);
-		border-color: transparent;
 	}
 
 	button.danger {

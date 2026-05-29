@@ -43,7 +43,7 @@ function fixtureView(): WorkspaceView {
 		activeSceneId: 's1',
 		scenes: [scene],
 		layouts: [{ id: 'l1', name: 'Main', activeSceneId: 's1', scenes: [scene] }],
-		customThemes: []
+		themes: []
 	};
 }
 

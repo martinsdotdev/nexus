@@ -2,9 +2,7 @@ import { expect, test, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import { page } from 'vitest/browser';
 import ThemeBuilder from './ThemeBuilder.svelte';
-import type { CustomTheme, SceneView } from '$lib/shared/crdt/workspace-view';
-// Load a built-in's tokens so the duplicate probe reads real values.
-import '$lib/shared/styles/themes/cozy.css';
+import type { SceneView, Theme } from '$lib/shared/crdt/workspace-view';
 
 const handlers = () => ({
 	onCreateTheme: vi.fn(() => 'theme-new'),
@@ -26,39 +24,64 @@ const scene = (themeId: string): SceneView => ({
 	widgets: []
 });
 
-const custom = (): CustomTheme => ({
-	id: 'theme-1',
-	name: 'My Theme',
-	base: 'cozy',
-	tokens: { primary: 'red', accent: 'blue' }
+const theme = (id: string, opts: Partial<Theme> = {}): Theme => ({
+	id,
+	name: opts.name ?? id,
+	base: opts.base ?? '',
+	protected: opts.protected ?? false,
+	tokens: opts.tokens ?? { primary: 'red', accent: 'blue' }
 });
 
-test('duplicate-to-customize creates a theme from the built-in and assigns it', async () => {
-	const h = handlers();
-	render(ThemeBuilder, { scene: scene('cozy'), customThemes: [], ...h });
-	await page.getByRole('button', { name: 'Duplicate to customize' }).click();
-	expect(h.onCreateTheme).toHaveBeenCalledWith(
-		expect.stringContaining('cozy'),
-		'cozy',
-		expect.anything()
-	);
-	expect(h.onSetSceneTheme).toHaveBeenCalledWith('s1', 'theme-new');
-});
+const cozy = theme('cozy', { name: 'Cozy', protected: true });
 
-test('editing a token reports the new value', async () => {
+test('editing a token in place reports the new value', async () => {
 	const h = handlers();
-	render(ThemeBuilder, { scene: scene('theme-1'), customThemes: [custom()], ...h });
+	render(ThemeBuilder, { scene: scene('cozy'), themes: [cozy], ...h });
 	const el = (await page
 		.getByRole('textbox', { name: 'primary', exact: true })
 		.element()) as HTMLInputElement;
 	el.value = 'green';
 	el.dispatchEvent(new Event('input', { bubbles: true }));
-	expect(h.onSetThemeToken).toHaveBeenCalledWith('theme-1', 'primary', 'green');
+	expect(h.onSetThemeToken).toHaveBeenCalledWith('cozy', 'primary', 'green');
+});
+
+test('duplicate forks the active built-in, deriving the copy from it', async () => {
+	const h = handlers();
+	render(ThemeBuilder, { scene: scene('cozy'), themes: [cozy], ...h });
+	await page.getByRole('button', { name: 'Duplicate' }).click();
+	expect(h.onCreateTheme).toHaveBeenCalledWith(
+		expect.stringContaining('Cozy'),
+		'cozy',
+		expect.objectContaining({ primary: 'red' })
+	);
+	expect(h.onSetSceneTheme).toHaveBeenCalledWith('s1', 'theme-new');
+});
+
+test('a protected built-in hides Delete', async () => {
+	const h = handlers();
+	render(ThemeBuilder, { scene: scene('cozy'), themes: [cozy], ...h });
+	await expect.element(page.getByRole('button', { name: 'Delete' })).not.toBeInTheDocument();
+});
+
+test('a protected built-in hides the link control (built-ins hold literals only)', async () => {
+	const h = handlers();
+	render(ThemeBuilder, { scene: scene('cozy'), themes: [cozy], ...h });
+	await expect
+		.element(page.getByRole('combobox', { name: 'Link primary', exact: true }))
+		.not.toBeInTheDocument();
+});
+
+test('deleting a custom theme removes it and falls the scene back', async () => {
+	const h = handlers();
+	render(ThemeBuilder, { scene: scene('theme-1'), themes: [theme('theme-1')], ...h });
+	await page.getByRole('button', { name: 'Delete' }).click();
+	expect(h.onDeleteTheme).toHaveBeenCalledWith('theme-1');
+	expect(h.onSetSceneTheme).toHaveBeenCalledWith('s1', 'cozy');
 });
 
 test('linking a token writes a link: reference', async () => {
 	const h = handlers();
-	render(ThemeBuilder, { scene: scene('theme-1'), customThemes: [custom()], ...h });
+	render(ThemeBuilder, { scene: scene('theme-1'), themes: [theme('theme-1')], ...h });
 	const select = (await page
 		.getByRole('combobox', { name: 'Link ring', exact: true })
 		.element()) as HTMLSelectElement;

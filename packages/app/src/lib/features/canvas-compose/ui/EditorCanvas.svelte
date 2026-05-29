@@ -9,13 +9,6 @@
 	import { WIDGET_REGISTRY } from '$lib/entities/widget';
 	import { resolveThemeStyle } from '$lib/entities/theme';
 	import { createEventBus } from '$lib/shared/events/event-bus';
-	// The canvas is a true overlay preview, so it needs the built-in theme
-	// stylesheets ([data-theme=...] cascades) the editor route does not otherwise
-	// load. They are scoped by [data-theme], so they never touch the editor chrome.
-	import '$lib/shared/styles/themes/cozy.css';
-	import '$lib/shared/styles/themes/cyber.css';
-	import '$lib/shared/styles/themes/editorial.css';
-	import '$lib/shared/styles/themes/sticker.css';
 	import { clientToVirtual, fitScale, VIRTUAL_H, VIRTUAL_W } from '../model/geometry';
 	import { snapRect, type Guide, type Rect } from '../model/snap';
 	import { resizeRect, type ResizeHandle } from '../model/resize';
@@ -36,7 +29,7 @@
 	);
 	const widgets = $derived((scene?.widgets ?? []).slice().sort((a, b) => a.z - b.z));
 	const themeStyle = $derived(
-		scene ? resolveThemeStyle(scene.themeId, view?.customThemes ?? [], scene.overridesAccent) : null
+		scene ? resolveThemeStyle(scene.themeId, view?.themes ?? [], scene.overridesAccent) : null
 	);
 
 	let areaW = $state(0);
@@ -160,7 +153,6 @@
 			<!-- svelte-ignore a11y_no_static_element_interactions -->
 			<div
 				class="themed-canvas"
-				data-theme={themeStyle.dataTheme}
 				data-density={scene.overridesDensity || 'normal'}
 				style={themeStyle.inlineVars}
 				onpointerdown={() => onSelectWidget(null)}

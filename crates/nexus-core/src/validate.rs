@@ -4,8 +4,8 @@
 //!
 //! Invariant classes:
 //! - **Repairable**: an active layout's `active_scene_id` points to no scene it
-//!   owns -> reset to its first scene; a scene's `theme_id` names neither a
-//!   built-in nor a registered custom theme -> reset to the default theme.
+//!   owns -> reset to its first scene; a scene's `theme_id` names no theme in the
+//!   registry (built-in or custom, ADR-0007) -> reset to the default theme.
 //! - **Strong**: an archived layout must hold no active scene -> blank it
 //!   (archive wins over a concurrent activation).
 //! - Weak invariants (concurrent activations of the same layout) need no repair:
@@ -13,14 +13,10 @@
 
 use std::collections::HashSet;
 
+use crate::builtin_themes::DEFAULT_THEME_ID;
 use crate::model::Workspace;
 use crate::schema;
 use loro::LoroDoc;
-
-/// The four built-in themes that ship as CSS (ADR-0006); a scene may reference
-/// one of these or a custom theme registered in the doc.
-pub const BUILTIN_THEMES: [&str; 4] = ["cozy", "cyber", "editorial", "sticker"];
-const DEFAULT_THEME: &str = "cozy";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RepairClass {
@@ -86,18 +82,15 @@ pub fn validate(ws: &Workspace) -> Vec<Repair> {
         }
     }
 
-    // Repairable: a scene's theme must be a built-in or a registered custom theme.
-    let known: HashSet<&str> = BUILTIN_THEMES
-        .iter()
-        .copied()
-        .chain(ws.themes.iter().map(|theme| theme.id.as_str()))
-        .collect();
+    // Repairable: a scene's theme must name a theme in the registry (the seeded
+    // built-ins and any custom themes; ADR-0007).
+    let known: HashSet<&str> = ws.themes.iter().map(|theme| theme.id.as_str()).collect();
     for layout in &ws.layouts {
         for scene in &layout.scenes {
             if !scene.theme_id.is_empty() && !known.contains(scene.theme_id.as_str()) {
                 repairs.push(Repair::SetSceneTheme {
                     scene_id: scene.id.clone(),
-                    theme_id: DEFAULT_THEME.into(),
+                    theme_id: DEFAULT_THEME_ID.into(),
                     reason: "theme missing; reset to default".into(),
                 });
             }
@@ -229,16 +222,27 @@ mod tests {
     }
 
     #[test]
-    fn builtin_and_registered_themes_need_no_repair() {
+    fn registered_themes_need_no_repair() {
+        // ADR-0007: built-ins and custom themes alike are registry entries.
         let mut ws = workspace(layout("active", "s0"));
         ws.layouts[0].scenes[0].theme_id = "cozy".into();
         ws.layouts[0].scenes[1].theme_id = "theme-custom".into();
-        ws.themes = vec![ThemeDef {
-            id: "theme-custom".into(),
-            name: "Custom".into(),
-            base: "cozy".into(),
-            tokens: Default::default(),
-        }];
+        ws.themes = vec![
+            ThemeDef {
+                id: "cozy".into(),
+                name: "Cozy".into(),
+                base: String::new(),
+                protected: true,
+                tokens: Default::default(),
+            },
+            ThemeDef {
+                id: "theme-custom".into(),
+                name: "Custom".into(),
+                base: "cozy".into(),
+                protected: false,
+                tokens: Default::default(),
+            },
+        ];
         assert!(validate(&ws).is_empty());
     }
 

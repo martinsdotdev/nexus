@@ -1,8 +1,10 @@
 import { expect, test } from '@playwright/test';
 
-// The theme builder loop: duplicate a built-in into a custom theme, edit a token,
-// and confirm the custom theme (its inline CSS vars) reaches the overlay live.
-test('a custom theme authored in the editor renders on the overlay', async ({ browser }) => {
+// The theme builder loop: duplicate the active built-in into an editable theme,
+// edit a token, and confirm the theme's resolved CSS vars reach the overlay live.
+// Every theme is data now (ADR-0007): the overlay carries the resolved tokens
+// inline, with no [data-theme] cascade.
+test('a theme authored in the editor renders on the overlay', async ({ browser }) => {
 	const editor = await browser.newPage();
 	// Wide so the inspector/theme panel is docked (not an off-canvas drawer).
 	await editor.setViewportSize({ width: 1440, height: 900 });
@@ -18,10 +20,10 @@ test('a custom theme authored in the editor renders on the overlay', async ({ br
 
 	const panel = editor.locator('.dock-right');
 	await panel.getByRole('button', { name: 'Customize theme' }).click();
-	await panel.getByRole('button', { name: 'Duplicate to customize' }).click();
+	await panel.getByRole('button', { name: 'Duplicate' }).click();
 	await panel.getByRole('textbox', { name: 'primary', exact: true }).fill('rgb(1, 2, 3)');
 
-	// The overlay's canvas carries the custom theme inline (base data-theme + vars).
+	// The overlay's canvas carries the resolved theme inline.
 	await expect(overlay.locator('.overlay-canvas')).toHaveAttribute(
 		'style',
 		/--primary:\s*rgb\(1, 2, 3\)/

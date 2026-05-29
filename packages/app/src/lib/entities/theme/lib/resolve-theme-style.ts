@@ -1,47 +1,48 @@
-// Resolves a scene's themeId into how to apply it: a `data-theme` attribute
-// (built-in CSS cascade, or a custom theme's `base` as the fallback layer) plus
-// an inline CSS-custom-property string for a custom theme's token values. The
-// single source of theme application for both /overlay and the editor canvas.
-// Pure: no DOM, no Loro. Token links (`link:<token>`) resolve here with cycle
-// detection; a dangling or cyclic token is dropped so the base CSS still covers
-// it. An accent override is appended last so it wins.
+// Resolves a scene's themeId into the inline CSS-custom-property string the
+// overlay/canvas root carries. Every theme is data now (ADR-0007): there is no
+// [data-theme] cascade to fall back on, so this is the single source of theme
+// application for both /overlay and the editor canvas. Pure: no DOM, no Loro.
+//
+// Layering (lowest to highest precedence): the default theme (a safety floor so
+// a partial/imported theme never renders unstyled), the selected theme's `base`,
+// then the selected theme itself. Token links (`link:<token>`) resolve over the
+// merged set with cycle detection; a token whose winning value is a dangling or
+// cyclic link falls back to the default theme's literal. The default theme and
+// any `base` are protected built-ins, which hold only literals (no links; see
+// mutations.setThemeToken), so this fallback is always resolvable: every one of
+// the 33 tokens is emitted, which is what keeps the overlay from inheriting the
+// editor chrome's same-named :root tokens. An accent override wins.
 
-import { DEFAULT_THEME_ID, THEME_TOKENS, isBuiltinTheme } from '../model/tokens';
-import type { CustomTheme } from '$lib/shared/crdt/workspace-view';
+import { DEFAULT_THEME_ID, THEME_TOKENS } from '../model/tokens';
+import type { Theme, ThemeTokens } from '$lib/shared/crdt/workspace-view';
 import { resolveToken } from './link-graph';
 
 export interface ResolvedThemeStyle {
-	/** Value for the canvas root's `data-theme` attribute. */
-	dataTheme: string;
-	/** Inline `--token: value;` declarations (empty for a plain built-in). */
+	/** Inline `--token: value;` declarations applied to the themed root. */
 	inlineVars: string;
 }
 
 export function resolveThemeStyle(
 	themeId: string,
-	customThemes: CustomTheme[],
+	themes: Theme[],
 	accentOverride = ''
 ): ResolvedThemeStyle {
-	const parts: string[] = [];
-	let dataTheme: string;
+	const byId = new Map(themes.map((theme) => [theme.id, theme]));
+	const fallback = byId.get(DEFAULT_THEME_ID);
+	const selected = byId.get(themeId) ?? fallback;
+	const base = selected?.base ? byId.get(selected.base) : undefined;
+	const merged: ThemeTokens = { ...fallback?.tokens, ...base?.tokens, ...selected?.tokens };
 
-	if (isBuiltinTheme(themeId)) {
-		dataTheme = themeId;
-	} else {
-		const custom = customThemes.find((theme) => theme.id === themeId);
-		if (custom) {
-			// The base built-in is the fallback layer for any token left unset,
-			// dangling, or cyclic; resolved values override it inline.
-			dataTheme = isBuiltinTheme(custom.base) ? custom.base : DEFAULT_THEME_ID;
-			for (const token of THEME_TOKENS) {
-				const resolved = resolveToken(custom.tokens, token, new Set());
-				if (resolved !== undefined) parts.push(`--${token}: ${resolved};`);
-			}
-		} else {
-			dataTheme = DEFAULT_THEME_ID;
-		}
+	const parts: string[] = [];
+	for (const token of THEME_TOKENS) {
+		// The accent override (if any) replaces the resolved accent in place, so
+		// `--accent` is emitted exactly once rather than appended as a duplicate.
+		const value =
+			token === 'accent' && accentOverride
+				? accentOverride
+				: (resolveToken(merged, token, new Set()) ?? resolveToken(fallback?.tokens ?? {}, token));
+		if (value !== undefined) parts.push(`--${token}: ${value};`);
 	}
 
-	if (accentOverride) parts.push(`--accent: ${accentOverride};`);
-	return { dataTheme, inlineVars: parts.join(' ') };
+	return { inlineVars: parts.join(' ') };
 }

@@ -1,9 +1,10 @@
 import { expect, test } from '@playwright/test';
 
 // The overlay renders the active scene's themed composition and reflects editor
-// scene switches live (the editor -> OBS loop), re-theming with zero JS via the
-// [data-theme] cascade. Default scenes: live=cozy, starting_soon=cyber,
-// brb=editorial, ending=sticker; the live scene seeds the eight v1 widgets.
+// scene switches live (the editor -> OBS loop), re-theming by swapping the
+// resolved CSS vars it carries inline (every theme is data, ADR-0007). Default
+// scenes: live=cozy, starting_soon=cyber, brb=editorial, ending=sticker; the
+// live scene seeds the eight v1 widgets.
 test('overlay renders the composition and re-themes when the editor switches scene', async ({
 	browser
 }) => {
@@ -21,10 +22,11 @@ test('overlay renders the composition and re-themes when the editor switches sce
 	await editorCards.nth(0).click();
 	const canvas = overlay.locator('.overlay-canvas');
 	await expect(canvas).toBeVisible();
-	await expect(canvas).toHaveAttribute('data-theme', 'cozy');
+	// cozy's primary, inlined as a CSS var on the canvas root.
+	await expect(canvas).toHaveAttribute('style', /--primary:\s*oklch\(70% 0\.15 50\)/);
 	await expect(overlay.locator('.widget-slot')).toHaveCount(8);
 
 	// Switch the editor to "starting_soon" (cyber); the overlay re-themes live.
 	await editorCards.nth(1).click();
-	await expect(canvas).toHaveAttribute('data-theme', 'cyber');
+	await expect(canvas).toHaveAttribute('style', /--primary:\s*oklch\(75% 0\.2 200\)/);
 });

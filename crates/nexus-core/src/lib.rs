@@ -5,6 +5,7 @@
 //! document but has no IO, async runtime, network, clock, or randomness (those
 //! arrive via the `Clock`/`Random` ports). See ADR-0005.
 
+pub mod builtin_themes;
 pub mod default_doc;
 pub mod model;
 pub mod schema;

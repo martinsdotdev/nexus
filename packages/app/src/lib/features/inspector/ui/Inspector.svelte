@@ -4,14 +4,13 @@
 	// scene's theme + overrides. Presentational: every change is reported through a
 	// callback the page wires to the Loro client, so edits preview live on the
 	// canvas/overlay and coalesce into undo steps. Editor chrome (editor tokens).
-	import type { CustomTheme, SceneView, WidgetView } from '$lib/shared/crdt/workspace-view';
+	import type { Theme, SceneView, WidgetView } from '$lib/shared/crdt/workspace-view';
 	import { propSchemaFor } from '$lib/entities/widget';
-	import { BUILTIN_THEME_IDS } from '$lib/entities/theme';
 
 	interface Props {
 		widget: WidgetView | null;
 		scene: SceneView | null;
-		customThemes: CustomTheme[];
+		themes: Theme[];
 		onSetGeometry: (
 			id: string,
 			geom: { x?: number; y?: number; w?: number; h?: number; z?: number }
@@ -25,7 +24,7 @@
 	let {
 		widget,
 		scene,
-		customThemes,
+		themes,
 		onSetGeometry,
 		onSetProp,
 		onSetVisible,
@@ -147,10 +146,7 @@
 		<label class="field">
 			<span>Theme</span>
 			<select value={s.themeId} onchange={(e) => onSetSceneTheme(s.id, e.currentTarget.value)}>
-				{#each BUILTIN_THEME_IDS as id (id)}
-					<option value={id}>{id}</option>
-				{/each}
-				{#each customThemes as theme (theme.id)}
+				{#each themes as theme (theme.id)}
 					<option value={theme.id}>{theme.name}</option>
 				{/each}
 			</select>

@@ -1,9 +1,10 @@
 <script lang="ts">
 	// The overlay: a transparent, read-only renderer OBS loads. It mirrors the
 	// active scene of the selected layout (?layout=, else the active layout) from
-	// a read-only Loro replica, applies the scene's theme via [data-theme], and
-	// renders its widgets absolutely-positioned on a 1920x1080 virtual canvas
-	// scaled to the viewport. No editor chrome; live-synced from the relay.
+	// a read-only Loro replica, applies the scene's theme as inline CSS vars
+	// (every theme is data, ADR-0007), and renders its widgets absolutely-
+	// positioned on a 1920x1080 virtual canvas scaled to the viewport. No editor
+	// chrome; live-synced from the relay.
 	import { page } from '$app/state';
 	import { createReadOnlyClient, type ReadOnlyClient } from '$lib/shared/crdt/client.svelte';
 	import { createEventBus } from '$lib/shared/events/event-bus';
@@ -11,10 +12,6 @@
 	import { WIDGET_REGISTRY } from '$lib/entities/widget';
 	import { resolveThemeStyle } from '$lib/entities/theme';
 	import { VIRTUAL_W, VIRTUAL_H } from '$lib/shared/config/canvas';
-	import '$lib/shared/styles/themes/cozy.css';
-	import '$lib/shared/styles/themes/cyber.css';
-	import '$lib/shared/styles/themes/editorial.css';
-	import '$lib/shared/styles/themes/sticker.css';
 
 	// The event bus + scripted source drive the event-driven widgets.
 	const bus = createEventBus();
@@ -71,12 +68,11 @@
 	{#if scene}
 		{@const themeStyle = resolveThemeStyle(
 			scene.themeId,
-			workspace?.customThemes ?? [],
+			workspace?.themes ?? [],
 			scene.overridesAccent
 		)}
 		<div
 			class="overlay-canvas"
-			data-theme={themeStyle.dataTheme}
 			data-density={scene.overridesDensity || 'normal'}
 			style="width: {VIRTUAL_W}px; height: {VIRTUAL_H}px; transform: scale({scale}); {themeStyle.inlineVars}"
 		>
