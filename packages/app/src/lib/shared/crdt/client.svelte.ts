@@ -7,7 +7,7 @@
 
 import { LoroDoc } from 'loro-crdt';
 import { connectSync, type SyncConnection } from './sync-bridge';
-import { readWorkspace, type SceneView } from './workspace-view';
+import { readWorkspace, type SceneView, type WorkspaceView } from './workspace-view';
 
 const TREE = 'tree';
 const WORKSPACE = 'workspace';
@@ -49,6 +49,33 @@ export function createWorkspaceClient(url: string): WorkspaceClient {
 			if (!layout) return;
 			layout.data.set('activeSceneId', sceneId);
 			doc.commit();
+		},
+		dispose() {
+			unsubscribe();
+			sync.close();
+		}
+	};
+}
+
+export interface ReadOnlyClient {
+	readonly workspace: WorkspaceView;
+	dispose(): void;
+}
+
+/** A read-only replica for the overlay: imports relay state, never writes. */
+export function createReadOnlyClient(url: string): ReadOnlyClient {
+	const doc = new LoroDoc();
+	let version = $state(0);
+
+	const unsubscribe = doc.subscribe(() => {
+		version += 1;
+	});
+	const sync: SyncConnection = connectSync(doc, url, { readonly: true });
+
+	return {
+		get workspace(): WorkspaceView {
+			void version;
+			return readWorkspace(doc);
 		},
 		dispose() {
 			unsubscribe();
