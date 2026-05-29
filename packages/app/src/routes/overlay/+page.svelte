@@ -8,7 +8,8 @@
 	import { createReadOnlyClient, type ReadOnlyClient } from '$lib/shared/crdt/client.svelte';
 	import { createEventBus } from '$lib/shared/events/event-bus';
 	import { startMockSource } from '$lib/shared/events/mock-source';
-	import { WIDGET_REGISTRY } from './widgets/registry';
+	import { WIDGET_REGISTRY } from '$lib/entities/widget';
+	import { resolveThemeStyle } from '$lib/entities/theme';
 	import '$lib/shared/styles/themes/cozy.css';
 	import '$lib/shared/styles/themes/cyber.css';
 	import '$lib/shared/styles/themes/editorial.css';
@@ -70,13 +71,12 @@
 
 <div class="overlay-viewport">
 	{#if scene}
+		{@const themeStyle = resolveThemeStyle(scene.themeId, [], scene.overridesAccent)}
 		<div
 			class="overlay-canvas"
-			data-theme={scene.themeId || 'cozy'}
+			data-theme={themeStyle.dataTheme}
 			data-density={scene.overridesDensity || 'normal'}
-			style="width: {VIRTUAL_W}px; height: {VIRTUAL_H}px; transform: scale({scale});{scene.overridesAccent
-				? ` --accent: ${scene.overridesAccent};`
-				: ''}"
+			style="width: {VIRTUAL_W}px; height: {VIRTUAL_H}px; transform: scale({scale}); {themeStyle.inlineVars}"
 		>
 			{#each widgets as widget (widget.id)}
 				{@const Widget = WIDGET_REGISTRY[widget.widgetType]}

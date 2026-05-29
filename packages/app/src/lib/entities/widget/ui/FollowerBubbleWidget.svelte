@@ -1,7 +1,7 @@
 <script lang="ts">
 	// Follower bubble: seeds with a friendly placeholder, then live-updates from
 	// the latest follow alert. Styling is theme-variable only.
-	import type { WidgetProps } from './contract';
+	import type { WidgetProps } from '../model/contract';
 
 	let { instance, bus }: WidgetProps = $props();
 

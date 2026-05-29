@@ -1,7 +1,7 @@
 <script lang="ts">
 	// Alerts: queues incoming alert.* events and shows one at a time (FIFO) for a
 	// fixed duration before advancing. Styling is theme-variable only.
-	import type { WidgetProps } from './contract';
+	import type { WidgetProps } from '../model/contract';
 	import type {
 		FollowAlert,
 		SubscribeAlert,

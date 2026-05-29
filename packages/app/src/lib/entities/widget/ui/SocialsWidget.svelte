@@ -1,7 +1,7 @@
 <script lang="ts">
 	// Static widget: renders its seeded `handles` prop as a compact strip of muted
 	// handle chips. No event subscription. Styling is theme-variable only.
-	import type { WidgetProps } from './contract';
+	import type { WidgetProps } from '../model/contract';
 
 	let { instance }: WidgetProps = $props();
 

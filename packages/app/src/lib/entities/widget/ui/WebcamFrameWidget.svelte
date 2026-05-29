@@ -2,7 +2,7 @@
 	// Decorative webcam frame: a thick border around a transparent center so OBS
 	// composites the real webcam underneath. No event subscription; config only.
 	// Styling is theme-variable only.
-	import type { WidgetProps } from './contract';
+	import type { WidgetProps } from '../model/contract';
 
 	let { instance }: WidgetProps = $props();
 

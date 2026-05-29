@@ -1,7 +1,7 @@
 <script lang="ts">
 	// Canonical widget: seeds from props, then live-updates from its event. The
 	// other widgets follow this shape. Styling is theme-variable only.
-	import type { WidgetProps } from './contract';
+	import type { WidgetProps } from '../model/contract';
 
 	let { instance, bus }: WidgetProps = $props();
 

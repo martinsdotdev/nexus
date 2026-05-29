@@ -1,7 +1,7 @@
 <script lang="ts">
 	// Now-playing widget: seeds from props, then live-updates from media.track-changed.
 	// Styling is theme-variable only.
-	import type { WidgetProps } from './contract';
+	import type { WidgetProps } from '../model/contract';
 
 	let { instance, bus }: WidgetProps = $props();
 

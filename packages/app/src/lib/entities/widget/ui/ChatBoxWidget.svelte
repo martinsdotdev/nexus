@@ -1,7 +1,7 @@
 <script lang="ts">
 	// Chat box: appends incoming chat.message events to a capped live list and
 	// renders newest at the bottom. Styling is theme-variable only.
-	import type { WidgetProps } from './contract';
+	import type { WidgetProps } from '../model/contract';
 	import type { ChatMessage } from '$lib/shared/events/events';
 
 	let { instance, bus }: WidgetProps = $props();

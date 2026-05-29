@@ -1,7 +1,7 @@
 <script lang="ts">
 	// Goal bar: seeds the current value from props, then live-updates the total
 	// from goal.increment events. Styling is theme-variable only.
-	import type { WidgetProps } from './contract';
+	import type { WidgetProps } from '../model/contract';
 
 	let { instance, bus }: WidgetProps = $props();
 
