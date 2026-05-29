@@ -48,7 +48,12 @@ function fixtureView(): WorkspaceView {
 
 test('renders a slot per widget and reports the clicked widget id', async () => {
 	const onSelectWidget = vi.fn();
-	render(EditorCanvas, { view: fixtureView(), selectedWidgetId: null, onSelectWidget });
+	render(EditorCanvas, {
+		view: fixtureView(),
+		selectedWidgetId: null,
+		onSelectWidget,
+		onCommitGeometry: vi.fn()
+	});
 
 	await expect.element(page.getByRole('button', { name: 'stream-info' })).toBeVisible();
 	await expect.element(page.getByRole('button', { name: 'goal-bar' })).toBeVisible();
@@ -58,6 +63,38 @@ test('renders a slot per widget and reports the clicked widget id', async () => 
 });
 
 test('renders the selection outline for the selected widget', async () => {
-	render(EditorCanvas, { view: fixtureView(), selectedWidgetId: 'w1', onSelectWidget: vi.fn() });
+	render(EditorCanvas, {
+		view: fixtureView(),
+		selectedWidgetId: 'w1',
+		onSelectWidget: vi.fn(),
+		onCommitGeometry: vi.fn()
+	});
 	await expect.element(page.getByTestId('selection')).toBeVisible();
+});
+
+test('dragging a widget commits the new geometry exactly once (size preserved)', async () => {
+	const onCommitGeometry = vi.fn();
+	render(EditorCanvas, {
+		view: fixtureView(),
+		selectedWidgetId: null,
+		onSelectWidget: vi.fn(),
+		onCommitGeometry
+	});
+
+	const el = (await page.getByRole('button', { name: 'goal-bar' }).element()) as HTMLElement;
+	const box = el.getBoundingClientRect();
+	const cx = box.left + box.width / 2;
+	const cy = box.top + box.height / 2;
+
+	el.dispatchEvent(new PointerEvent('pointerdown', { clientX: cx, clientY: cy, bubbles: true }));
+	window.dispatchEvent(
+		new PointerEvent('pointermove', { clientX: cx + 80, clientY: cy + 60, bubbles: true })
+	);
+	window.dispatchEvent(
+		new PointerEvent('pointerup', { clientX: cx + 80, clientY: cy + 60, bubbles: true })
+	);
+
+	expect(onCommitGeometry).toHaveBeenCalledTimes(1);
+	// A move preserves size; only x/y change (exact x/y depend on scale + snap).
+	expect(onCommitGeometry).toHaveBeenCalledWith('w2', expect.objectContaining({ w: 520, h: 56 }));
 });

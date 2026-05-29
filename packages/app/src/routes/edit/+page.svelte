@@ -111,6 +111,7 @@
 		view={workspace?.workspace ?? null}
 		selectedWidgetId={shell.selectedWidgetId}
 		onSelectWidget={(id) => shell.selectWidget(id)}
+		onCommitGeometry={(id, rect) => workspace?.setWidgetGeometry(id, rect)}
 	/>
 
 	<div class="dock dock-right">
