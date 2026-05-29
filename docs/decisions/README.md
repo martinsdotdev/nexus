@@ -85,6 +85,7 @@ The spec at [`docs/superpowers/specs/`](../superpowers/specs/) is the *current* 
 | [0003](0003-dark-first-pro-creative-tool-editor-aesthetic.md) | Dark-first pro-creative-tool editor aesthetic | accepted | 2026-05-27 |
 | [0004](0004-responsive-editor-shell.md) | Responsive editor shell via CSS-owned reflow, container-query panels, and off-canvas drawers | accepted | 2026-05-28 |
 | [0005](0005-offline-collaborative-loro-crdt-trusted-relay.md) | Offline-collaborative local-first architecture on Loro CRDT with a trusted sync relay | accepted | 2026-05-28 |
+| [0006](0006-data-driven-custom-themes.md) | Data-driven custom themes with a hybrid registry and token linking | accepted | 2026-05-29 |
 
 When adding an ADR, append a row to this table.
 
