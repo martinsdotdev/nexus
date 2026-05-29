@@ -3,8 +3,9 @@
 // virtual pixels. No DOM, the caller passes the live bounding rect + scale, so
 // this stays headless-testable and reusable by the drag/resize drivers.
 
-export const VIRTUAL_W = 1920;
-export const VIRTUAL_H = 1080;
+import { VIRTUAL_W, VIRTUAL_H } from '$lib/shared/config/canvas';
+
+export { VIRTUAL_W, VIRTUAL_H };
 
 export interface Size {
 	w: number;

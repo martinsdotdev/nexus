@@ -1,10 +1,10 @@
 /*
  * Prototype-level UI state for the editor shell. Shallow and client-only: it
- * holds which tool is active, panel collapse flags, off-canvas drawer flags, the
- * derived viewport mode, command-palette visibility, and the active scene. No
- * persistence, no qubit, no business logic. State resets on reload, which is
- * correct for a visual prototype. The real editor state will live in the Rust
- * core (Decider) reached over qubit; this is chrome.
+ * holds which tool is active, panel collapse + off-canvas drawer flags, the
+ * derived viewport mode, command-palette + theme-editor visibility, and the
+ * per-user widget selection. Never synced and never persisted (it resets on
+ * reload). The collaborative document state lives in the local Loro replica
+ * synced to the trusted relay (ADR-0005), not here.
  *
  * Exposed via getters so the $state stays reactive when read inside components.
  */
@@ -146,14 +146,8 @@ export function createShellState() {
 			paletteOpen = false;
 		},
 
-		get selectedWidgetIds() {
-			return selectedWidgetIds;
-		},
 		get selectedWidgetId(): string | null {
 			return selectedWidgetIds[0] ?? null;
-		},
-		isWidgetSelected(id: string) {
-			return selectedWidgetIds.includes(id);
 		},
 		selectWidget(id: string | null) {
 			selectedWidgetIds = id ? [id] : [];

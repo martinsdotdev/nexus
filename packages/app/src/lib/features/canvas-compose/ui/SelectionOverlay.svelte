@@ -47,7 +47,7 @@
 		width: 12px;
 		height: 12px;
 		background: var(--editor-selection);
-		box-shadow: 0 0 0 1.5px var(--invert);
+		box-shadow: 0 0 0 1.5px var(--editor-selection-foreground);
 		border-radius: 2px;
 		pointer-events: auto;
 		touch-action: none;

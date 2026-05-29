@@ -15,6 +15,7 @@
 		DEFAULT_WIDGET_SIZE,
 		DEFAULT_WIDGET_PROPS
 	} from '$lib/entities/widget';
+	import { VIRTUAL_W, VIRTUAL_H } from '$lib/shared/config/canvas';
 
 	const shell = createShellState();
 
@@ -68,8 +69,8 @@
 		if (!workspace || !scene) return;
 		const size = DEFAULT_WIDGET_SIZE[widgetType] ?? { w: 400, h: 200 };
 		const geom = {
-			x: Math.round((1920 - size.w) / 2),
-			y: Math.round((1080 - size.h) / 2),
+			x: Math.round((VIRTUAL_W - size.w) / 2),
+			y: Math.round((VIRTUAL_H - size.h) / 2),
 			w: size.w,
 			h: size.h,
 			z: 5
@@ -202,6 +203,7 @@
 		<Inspector
 			widget={selectedWidget}
 			scene={activeScene}
+			{customThemes}
 			onSetGeometry={(id, geom) => workspace?.setWidgetGeometry(id, geom)}
 			onSetProp={(id, key, value) => workspace?.setWidgetProp(id, key, value)}
 			onSetVisible={(id, visible) => workspace?.setWidgetVisible(id, visible)}

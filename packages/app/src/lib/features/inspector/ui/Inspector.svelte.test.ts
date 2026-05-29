@@ -45,7 +45,7 @@ async function spinbutton(name: string) {
 
 test('editing a text prop reports the new value', async () => {
 	const h = handlers();
-	render(Inspector, { widget: widget(), scene: null, ...h });
+	render(Inspector, { widget: widget(), scene: null, customThemes: [], ...h });
 	const el = await input('Title');
 	el.value = 'New Title';
 	el.dispatchEvent(new Event('input', { bubbles: true }));
@@ -54,7 +54,7 @@ test('editing a text prop reports the new value', async () => {
 
 test('editing X reports the geometry change', async () => {
 	const h = handlers();
-	render(Inspector, { widget: widget(), scene: null, ...h });
+	render(Inspector, { widget: widget(), scene: null, customThemes: [], ...h });
 	const el = await spinbutton('X');
 	el.value = '100';
 	el.dispatchEvent(new Event('input', { bubbles: true }));
@@ -63,14 +63,14 @@ test('editing X reports the geometry change', async () => {
 
 test('toggling visibility reports it', async () => {
 	const h = handlers();
-	render(Inspector, { widget: widget(), scene: null, ...h });
+	render(Inspector, { widget: widget(), scene: null, customThemes: [], ...h });
 	await page.getByRole('checkbox', { name: 'Visible' }).click();
 	expect(h.onSetVisible).toHaveBeenCalledWith('w1', false);
 });
 
 test('with no widget, changing the scene theme reports it', async () => {
 	const h = handlers();
-	render(Inspector, { widget: null, scene: scene(), ...h });
+	render(Inspector, { widget: null, scene: scene(), customThemes: [], ...h });
 	const select = (await page
 		.getByRole('combobox', { name: 'Theme' })
 		.element()) as HTMLSelectElement;

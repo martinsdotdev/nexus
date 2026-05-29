@@ -74,6 +74,14 @@ export function createWorkspaceClient(url: string): WorkspaceClient {
 		return roots.find((node) => String(node.id) === activeLayoutId) ?? roots[0];
 	}
 
+	// Run a mutation then commit (one undoable step) and return its result. Every
+	// write goes through this, so "forgot to commit" is structurally impossible.
+	const tx = <R>(run: () => R): R => {
+		const result = run();
+		doc.commit();
+		return result;
+	};
+
 	return {
 		get scenes(): SceneView[] {
 			void version;
@@ -96,66 +104,52 @@ export function createWorkspaceClient(url: string): WorkspaceClient {
 			return undo.canRedo();
 		},
 		activate(sceneId: string) {
-			const layout = activeLayout();
-			if (!layout) return;
-			layout.data.set('activeSceneId', sceneId);
-			doc.commit();
+			tx(() => {
+				const layout = activeLayout();
+				if (layout) layout.data.set('activeSceneId', sceneId);
+			});
 		},
 		setWidgetGeometry(id, geom) {
-			mutate.setWidgetGeometry(doc, id, geom);
-			doc.commit();
+			tx(() => mutate.setWidgetGeometry(doc, id, geom));
 		},
 		setWidgetZ(id, z) {
-			mutate.setWidgetZ(doc, id, z);
-			doc.commit();
+			tx(() => mutate.setWidgetZ(doc, id, z));
 		},
 		setWidgetVisible(id, visible) {
-			mutate.setWidgetVisible(doc, id, visible);
-			doc.commit();
+			tx(() => mutate.setWidgetVisible(doc, id, visible));
 		},
 		setWidgetProp(id, key, value) {
-			mutate.setWidgetProp(doc, id, key, value);
-			doc.commit();
+			tx(() => mutate.setWidgetProp(doc, id, key, value));
 		},
 		createWidget(sceneId, widgetType, geom, props) {
-			const id = mutate.createWidget(doc, sceneId, widgetType, geom, props);
-			doc.commit();
-			return id;
+			return tx(() => mutate.createWidget(doc, sceneId, widgetType, geom, props));
 		},
 		deleteWidget(id) {
-			mutate.deleteWidget(doc, id);
-			doc.commit();
+			tx(() => mutate.deleteWidget(doc, id));
 		},
 		moveWidgetToScene(id, sceneId) {
-			mutate.moveWidgetToScene(doc, id, sceneId);
-			doc.commit();
+			tx(() => mutate.moveWidgetToScene(doc, id, sceneId));
 		},
 		setSceneTheme(sceneId, themeId) {
-			mutate.setSceneTheme(doc, sceneId, themeId);
-			doc.commit();
+			tx(() => mutate.setSceneTheme(doc, sceneId, themeId));
 		},
 		setSceneOverride(sceneId, key, value) {
-			mutate.setSceneOverride(doc, sceneId, key, value);
-			doc.commit();
+			tx(() => mutate.setSceneOverride(doc, sceneId, key, value));
 		},
 		createTheme(name, base, tokens) {
 			// Mint a unique id (never the name) so concurrent creates never collide.
 			const id = `theme-${crypto.randomUUID()}`;
-			mutate.createTheme(doc, id, name, base, tokens);
-			doc.commit();
+			tx(() => mutate.createTheme(doc, id, name, base, tokens));
 			return id;
 		},
 		renameTheme(id, name) {
-			mutate.renameTheme(doc, id, name);
-			doc.commit();
+			tx(() => mutate.renameTheme(doc, id, name));
 		},
 		setThemeToken(id, token, value) {
-			mutate.setThemeToken(doc, id, token, value);
-			doc.commit();
+			tx(() => mutate.setThemeToken(doc, id, token, value));
 		},
 		deleteTheme(id) {
-			mutate.deleteTheme(doc, id);
-			doc.commit();
+			tx(() => mutate.deleteTheme(doc, id));
 		},
 		exportTheme(id) {
 			return mutate.exportTheme(doc, id);

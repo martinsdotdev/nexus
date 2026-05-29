@@ -10,13 +10,11 @@
 	import { startMockSource } from '$lib/shared/events/mock-source';
 	import { WIDGET_REGISTRY } from '$lib/entities/widget';
 	import { resolveThemeStyle } from '$lib/entities/theme';
+	import { VIRTUAL_W, VIRTUAL_H } from '$lib/shared/config/canvas';
 	import '$lib/shared/styles/themes/cozy.css';
 	import '$lib/shared/styles/themes/cyber.css';
 	import '$lib/shared/styles/themes/editorial.css';
 	import '$lib/shared/styles/themes/sticker.css';
-
-	const VIRTUAL_W = 1920;
-	const VIRTUAL_H = 1080;
 
 	// The event bus + scripted source drive the event-driven widgets.
 	const bus = createEventBus();

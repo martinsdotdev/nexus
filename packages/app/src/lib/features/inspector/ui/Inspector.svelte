@@ -4,13 +4,14 @@
 	// scene's theme + overrides. Presentational: every change is reported through a
 	// callback the page wires to the Loro client, so edits preview live on the
 	// canvas/overlay and coalesce into undo steps. Editor chrome (editor tokens).
-	import type { SceneView, WidgetView } from '$lib/shared/crdt/workspace-view';
+	import type { CustomTheme, SceneView, WidgetView } from '$lib/shared/crdt/workspace-view';
 	import { propSchemaFor } from '$lib/entities/widget';
 	import { BUILTIN_THEME_IDS } from '$lib/entities/theme';
 
 	interface Props {
 		widget: WidgetView | null;
 		scene: SceneView | null;
+		customThemes: CustomTheme[];
 		onSetGeometry: (
 			id: string,
 			geom: { x?: number; y?: number; w?: number; h?: number; z?: number }
@@ -24,6 +25,7 @@
 	let {
 		widget,
 		scene,
+		customThemes,
 		onSetGeometry,
 		onSetProp,
 		onSetVisible,
@@ -33,10 +35,14 @@
 	}: Props = $props();
 
 	const fields = $derived(widget ? propSchemaFor(widget.widgetType) : []);
-	const toNum = (value: string) => {
-		const n = Number(value);
-		return Number.isFinite(n) ? n : 0;
-	};
+	// Number fields commit only a finite parse, so typing '-', '1.', or clearing
+	// the field is not clobbered by an immediate 0-write and a valid intermediate
+	// is never forced back mid-keystroke.
+	function onNumberInput(raw: string, write: (value: number) => void) {
+		if (raw === '') return;
+		const value = Number(raw);
+		if (Number.isFinite(value)) write(value);
+	}
 	const DENSITIES = ['normal', 'compact', 'spacious'];
 </script>
 
@@ -52,35 +58,40 @@
 					>X<input
 						type="number"
 						value={w.x}
-						oninput={(e) => onSetGeometry(w.id, { x: toNum(e.currentTarget.value) })}
+						oninput={(e) =>
+							onNumberInput(e.currentTarget.value, (v) => onSetGeometry(w.id, { x: v }))}
 					/></label
 				>
 				<label
 					>Y<input
 						type="number"
 						value={w.y}
-						oninput={(e) => onSetGeometry(w.id, { y: toNum(e.currentTarget.value) })}
+						oninput={(e) =>
+							onNumberInput(e.currentTarget.value, (v) => onSetGeometry(w.id, { y: v }))}
 					/></label
 				>
 				<label
 					>W<input
 						type="number"
 						value={w.w}
-						oninput={(e) => onSetGeometry(w.id, { w: toNum(e.currentTarget.value) })}
+						oninput={(e) =>
+							onNumberInput(e.currentTarget.value, (v) => onSetGeometry(w.id, { w: v }))}
 					/></label
 				>
 				<label
 					>H<input
 						type="number"
 						value={w.h}
-						oninput={(e) => onSetGeometry(w.id, { h: toNum(e.currentTarget.value) })}
+						oninput={(e) =>
+							onNumberInput(e.currentTarget.value, (v) => onSetGeometry(w.id, { h: v }))}
 					/></label
 				>
 				<label
 					>Z<input
 						type="number"
 						value={w.z}
-						oninput={(e) => onSetGeometry(w.id, { z: toNum(e.currentTarget.value) })}
+						oninput={(e) =>
+							onNumberInput(e.currentTarget.value, (v) => onSetGeometry(w.id, { z: v }))}
 					/></label
 				>
 			</div>
@@ -114,7 +125,8 @@
 							<input
 								type="number"
 								value={Number(w.props[field.key] ?? 0)}
-								oninput={(e) => onSetProp(w.id, field.key, toNum(e.currentTarget.value))}
+								oninput={(e) =>
+									onNumberInput(e.currentTarget.value, (v) => onSetProp(w.id, field.key, v))}
 							/>
 						{:else}
 							<input
@@ -137,6 +149,9 @@
 			<select value={s.themeId} onchange={(e) => onSetSceneTheme(s.id, e.currentTarget.value)}>
 				{#each BUILTIN_THEME_IDS as id (id)}
 					<option value={id}>{id}</option>
+				{/each}
+				{#each customThemes as theme (theme.id)}
+					<option value={theme.id}>{theme.name}</option>
 				{/each}
 			</select>
 		</label>

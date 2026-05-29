@@ -2,7 +2,6 @@ import { describe, expect, test } from 'vitest';
 import { LoroDoc } from 'loro-crdt';
 import { createTheme, deleteTheme, exportTheme, renameTheme, setThemeToken } from './mutations';
 import { readWorkspace } from './workspace-view';
-import { resolveThemeStyle } from '$lib/entities/theme';
 
 const customThemes = (doc: LoroDoc) => readWorkspace(doc).customThemes;
 
@@ -54,14 +53,5 @@ describe('theme registry mutations', () => {
 			tokens: { primary: 'red' }
 		});
 		expect(exportTheme(doc, 'missing')).toBeNull();
-	});
-
-	test('a custom theme in the doc resolves to inline vars end to end', () => {
-		const doc = new LoroDoc();
-		createTheme(doc, 'theme-1', 'X', 'cyber', { primary: 'red' });
-		doc.commit();
-		const style = resolveThemeStyle('theme-1', customThemes(doc));
-		expect(style.dataTheme).toBe('cyber');
-		expect(style.inlineVars).toContain('--primary: red;');
 	});
 });

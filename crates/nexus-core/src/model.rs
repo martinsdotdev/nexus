@@ -56,32 +56,35 @@ pub fn read_workspace(doc: &LoroDoc) -> Workspace {
     let workspace = doc.get_map(schema::WORKSPACE);
     let tree = doc.get_tree(schema::TREE);
 
+    // Total: a node whose meta cannot be read (e.g. concurrently deleted after the
+    // roots()/children() snapshot) is skipped rather than panicking, keeping the
+    // documented totality the validator relies on.
     let layouts = tree
         .roots()
         .into_iter()
-        .map(|layout_id| {
-            let layout_meta = tree.get_meta(layout_id).expect("layout meta map");
+        .filter_map(|layout_id| {
+            let layout_meta = tree.get_meta(layout_id).ok()?;
             let scenes = tree
                 .children(layout_id)
                 .unwrap_or_default()
                 .into_iter()
-                .map(|scene_id| {
-                    let scene_meta = tree.get_meta(scene_id).expect("scene meta map");
-                    Scene {
+                .filter_map(|scene_id| {
+                    let scene_meta = tree.get_meta(scene_id).ok()?;
+                    Some(Scene {
                         id: scene_id.to_string(),
                         kind: map_str(&scene_meta, "kind"),
                         name: map_str(&scene_meta, "name"),
                         theme_id: map_str(&scene_meta, "themeId"),
-                    }
+                    })
                 })
                 .collect();
-            Layout {
+            Some(Layout {
                 id: layout_id.to_string(),
                 name: map_str(&layout_meta, "name"),
                 status: map_str(&layout_meta, "status"),
                 active_scene_id: map_str(&layout_meta, "activeSceneId"),
                 scenes,
-            }
+            })
         })
         .collect();
 

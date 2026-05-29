@@ -7,7 +7,9 @@
 	import type { CustomTheme, SceneView, ThemeTokens } from '$lib/shared/crdt/workspace-view';
 	import {
 		BUILTIN_THEME_IDS,
+		DEFAULT_THEME_ID,
 		LINK_PREFIX,
+		THEME_TOKENS,
 		TOKEN_GROUPS,
 		isBuiltinTheme,
 		isColorToken,
@@ -41,7 +43,6 @@
 
 	const activeThemeId = $derived(scene?.themeId ?? '');
 	const activeCustom = $derived(customThemes.find((theme) => theme.id === activeThemeId) ?? null);
-	const allTokens = TOKEN_GROUPS.flatMap((group) => group.tokens);
 
 	let importText = $state('');
 
@@ -52,15 +53,19 @@
 
 	function duplicateToCustomize() {
 		if (!scene) return;
-		const base = isBuiltinTheme(activeThemeId) ? activeThemeId : 'cozy';
+		const base = isBuiltinTheme(activeThemeId) ? activeThemeId : DEFAULT_THEME_ID;
 		const id = onCreateTheme(`${base} custom`, base, readBuiltinTokens(base));
 		onSetSceneTheme(scene.id, id);
 	}
 
 	function changeLink(theme: CustomTheme, token: string, target: string) {
 		if (target === '') {
-			// Unlink: freeze the token at its currently-resolved literal.
-			onSetThemeToken(theme.id, token, resolveTokenValue(theme.tokens, token));
+			// Unlink: freeze the token at its currently-resolved literal. If the chain
+			// was dangling/cyclic (resolves to ''), fall back to the base built-in's
+			// value so we never write an empty token.
+			const resolved =
+				resolveTokenValue(theme.tokens, token) || readBuiltinTokens(theme.base)[token];
+			if (resolved) onSetThemeToken(theme.id, token, resolved);
 		} else if (!wouldCycle(theme.tokens, token, target)) {
 			onSetThemeToken(theme.id, token, `${LINK_PREFIX}${target}`);
 		}
@@ -80,7 +85,7 @@
 
 	function deleteActive(theme: CustomTheme) {
 		if (!scene) return;
-		const fallback = isBuiltinTheme(theme.base) ? theme.base : 'cozy';
+		const fallback = isBuiltinTheme(theme.base) ? theme.base : DEFAULT_THEME_ID;
 		onDeleteTheme(theme.id);
 		onSetSceneTheme(scene.id, fallback);
 	}
@@ -89,7 +94,7 @@
 		if (!scene) return;
 		try {
 			const parsed = JSON.parse(importText);
-			const base = isBuiltinTheme(String(parsed.base)) ? String(parsed.base) : 'cozy';
+			const base = isBuiltinTheme(String(parsed.base)) ? String(parsed.base) : DEFAULT_THEME_ID;
 			const tokens =
 				parsed.tokens && typeof parsed.tokens === 'object'
 					? (parsed.tokens as ThemeTokens)
@@ -167,7 +172,7 @@
 								onchange={(e) => changeLink(ac, token, e.currentTarget.value)}
 							>
 								<option value="">(literal)</option>
-								{#each allTokens.filter((other) => other !== token) as other (other)}
+								{#each THEME_TOKENS.filter((other) => other !== token) as other (other)}
 									<option value={other}>{other}</option>
 								{/each}
 							</select>

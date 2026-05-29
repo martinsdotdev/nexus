@@ -6,29 +6,15 @@
 // detection; a dangling or cyclic token is dropped so the base CSS still covers
 // it. An accent override is appended last so it wins.
 
-import { DEFAULT_THEME_ID, LINK_PREFIX, THEME_TOKENS, isBuiltinTheme } from '../model/tokens';
+import { DEFAULT_THEME_ID, THEME_TOKENS, isBuiltinTheme } from '../model/tokens';
 import type { CustomTheme } from '$lib/shared/crdt/workspace-view';
+import { resolveToken } from './link-graph';
 
 export interface ResolvedThemeStyle {
 	/** Value for the canvas root's `data-theme` attribute. */
 	dataTheme: string;
 	/** Inline `--token: value;` declarations (empty for a plain built-in). */
 	inlineVars: string;
-}
-
-/** Follow `link:` references to a literal value; returns undefined on a dangling
- *  reference or a cycle (the canonical-token caller then drops the token). */
-function resolveToken(
-	tokens: Record<string, string>,
-	name: string,
-	seen: Set<string>
-): string | undefined {
-	const value = tokens[name];
-	if (value === undefined) return undefined;
-	if (!value.startsWith(LINK_PREFIX)) return value;
-	if (seen.has(name)) return undefined; // cycle
-	seen.add(name);
-	return resolveToken(tokens, value.slice(LINK_PREFIX.length), seen);
 }
 
 export function resolveThemeStyle(

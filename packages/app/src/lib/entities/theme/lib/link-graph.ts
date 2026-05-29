@@ -1,22 +1,30 @@
-// Token-link helpers for the theme builder: resolve a token to its literal value
-// (following `link:` references, cycle-safe) and check whether a proposed link
-// would create a cycle (so the builder can refuse it at author time). Pure.
+// Token-link helpers for the theme builder + the runtime resolver: follow a
+// token's `link:` references to a literal (cycle-safe), and check whether a
+// proposed link would create a cycle (so the builder can refuse it). Pure. This
+// is the single owner of the link-following + cycle-guard traversal.
 
 import { LINK_PREFIX } from '../model/tokens';
 import type { ThemeTokens } from '$lib/shared/crdt/workspace-view';
 
-/** Follow `link:` references to a literal; empty string on a cycle or a miss. */
-export function resolveTokenValue(
+/** Follow `link:` references to a literal value; undefined on a dangling
+ *  reference or a cycle (a caller that needs to drop the token uses this). */
+export function resolveToken(
 	tokens: ThemeTokens,
 	name: string,
 	seen: Set<string> = new Set()
-): string {
+): string | undefined {
 	const value: string | undefined = tokens[name];
-	if (value === undefined) return '';
+	if (value === undefined) return undefined;
 	if (!value.startsWith(LINK_PREFIX)) return value;
-	if (seen.has(name)) return '';
+	if (seen.has(name)) return undefined; // cycle
 	seen.add(name);
-	return resolveTokenValue(tokens, value.slice(LINK_PREFIX.length), seen);
+	return resolveToken(tokens, value.slice(LINK_PREFIX.length), seen);
+}
+
+/** Like {@link resolveToken} but yields '' instead of undefined (for the builder
+ *  to display or to freeze a token at its current value). */
+export function resolveTokenValue(tokens: ThemeTokens, name: string): string {
+	return resolveToken(tokens, name) ?? '';
 }
 
 /** Would linking `from` -> `to` create a cycle? Follow `to`'s chain; a cycle

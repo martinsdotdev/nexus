@@ -92,7 +92,7 @@ fn seed_widget_props(meta: &LoroMap, widget_type: &str) -> loro::LoroResult<()> 
         }
         "goal-bar" => {
             meta.insert("label", "Follower Goal")?;
-            meta.insert("current", 42)?;
+            meta.insert("current", 0)?;
             meta.insert("target", 100)?;
         }
         "socials" => {
