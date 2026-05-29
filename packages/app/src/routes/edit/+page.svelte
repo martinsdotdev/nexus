@@ -7,6 +7,7 @@
 	import SceneStrip from './SceneStrip.svelte';
 	import { createWorkspaceClient, type WorkspaceClient } from '$lib/shared/crdt/client.svelte';
 	import EditorCanvas from '$lib/features/canvas-compose/ui/EditorCanvas.svelte';
+	import Inspector from '$lib/features/inspector/ui/Inspector.svelte';
 
 	const shell = createShellState();
 
@@ -33,6 +34,15 @@
 		}))
 	);
 	const activeSceneId = $derived(workspace?.activeSceneId ?? '');
+
+	// The active scene + selected widget drive the inspector.
+	const activeScene = $derived.by(() => {
+		const scenes = workspace?.workspace.scenes ?? [];
+		return scenes.find((scene) => scene.id === activeSceneId) ?? scenes[0] ?? null;
+	});
+	const selectedWidget = $derived(
+		activeScene?.widgets.find((widget) => widget.id === shell.selectedWidgetId) ?? null
+	);
 
 	// Static command list for the prototype. Selecting one just closes the palette.
 	const commands: CommandItem[] = [
@@ -77,14 +87,15 @@
 {/snippet}
 
 {#snippet inspectorBody()}
-	<dl class="placeholder-props">
-		<dt>Position</dt>
-		<dd>320, 180</dd>
-		<dt>Size</dt>
-		<dd>640 x 360</dd>
-		<dt>Theme</dt>
-		<dd>Cozy</dd>
-	</dl>
+	<Inspector
+		widget={selectedWidget}
+		scene={activeScene}
+		onSetGeometry={(id, geom) => workspace?.setWidgetGeometry(id, geom)}
+		onSetProp={(id, key, value) => workspace?.setWidgetProp(id, key, value)}
+		onSetVisible={(id, visible) => workspace?.setWidgetVisible(id, visible)}
+		onSetSceneTheme={(sceneId, themeId) => workspace?.setSceneTheme(sceneId, themeId)}
+		onSetSceneOverride={(sceneId, key, value) => workspace?.setSceneOverride(sceneId, key, value)}
+	/>
 {/snippet}
 
 <div class="shell" inert={shell.leftDrawerOpen || shell.rightDrawerOpen}>
@@ -197,32 +208,6 @@
 		padding: var(--space-2);
 		border-radius: var(--radius-sm);
 		background: var(--muted);
-	}
-
-	.placeholder-props {
-		display: grid;
-		grid-template-columns: auto 1fr;
-		gap: var(--space-2) var(--space-3);
-		margin: 0;
-	}
-
-	.placeholder-props dt {
-		color: var(--muted-foreground);
-	}
-
-	.placeholder-props dd {
-		margin: 0;
-		font-family: var(--font-mono);
-		color: var(--foreground);
-	}
-
-	/* When the inspector's container is very narrow (a drawer on a tiny viewport), stack
-	   each prop label above its value. Resolves against the StudioPanel size container. */
-	@container (max-width: 220px) {
-		.placeholder-props {
-			grid-template-columns: 1fr;
-			gap: var(--space-1);
-		}
 	}
 
 	/*
