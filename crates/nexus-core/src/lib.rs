@@ -5,13 +5,7 @@
 //! document but has no IO, async runtime, network, clock, or randomness (those
 //! arrive via the `Clock`/`Random` ports). See ADR-0005.
 
-#[cfg(test)]
-mod smoke {
-    //! Confirms the `loro` crate resolves and is usable. Real schema and
-    //! validator tests land with their modules in the next step.
-
-    #[test]
-    fn loro_doc_constructs() {
-        let _doc = loro::LoroDoc::new();
-    }
-}
+pub mod default_doc;
+pub mod model;
+pub mod schema;
+pub mod validate;
