@@ -26,6 +26,7 @@ pub struct Scene {
     pub id: String,
     pub kind: String,
     pub name: String,
+    pub theme_id: String,
 }
 
 /// Read a string field from a node/workspace meta map, empty string if absent
@@ -58,6 +59,7 @@ pub fn read_workspace(doc: &LoroDoc) -> Workspace {
                         id: scene_id.to_string(),
                         kind: map_str(&scene_meta, "kind"),
                         name: map_str(&scene_meta, "name"),
+                        theme_id: map_str(&scene_meta, "themeId"),
                     }
                 })
                 .collect();
@@ -99,5 +101,27 @@ mod tests {
 
         // The default activates the live scene (the first one).
         assert_eq!(layout.active_scene_id, layout.scenes[0].id);
+    }
+
+    #[test]
+    fn seeds_per_scene_themes_and_live_widgets() {
+        let doc = LoroDoc::new();
+        build_default(&doc).unwrap();
+        let ws = read_workspace(&doc);
+        let layout = &ws.layouts[0];
+
+        let themes: Vec<&str> = layout.scenes.iter().map(|s| s.theme_id.as_str()).collect();
+        assert_eq!(themes, ["cozy", "cyber", "editorial", "sticker"]);
+
+        // The live scene is seeded with the eight v1 widgets.
+        let tree = doc.get_tree(schema::TREE);
+        let live = tree.children(tree.roots()[0]).unwrap()[0];
+        let widget_count = tree
+            .children(live)
+            .unwrap_or_default()
+            .into_iter()
+            .filter(|node| map_str(&tree.get_meta(*node).unwrap(), "type") == "widget")
+            .count();
+        assert_eq!(widget_count, 8);
     }
 }

@@ -6,7 +6,7 @@
 //! plan, trap T1).
 
 use crate::schema;
-use loro::LoroDoc;
+use loro::{LoroDoc, LoroMap, LoroTree, TreeID};
 
 /// Build the curated default workspace into a fresh [`LoroDoc`].
 pub fn build_default(doc: &LoroDoc) -> loro::LoroResult<()> {
@@ -18,27 +18,95 @@ pub fn build_default(doc: &LoroDoc) -> loro::LoroResult<()> {
     layout_meta.insert("name", "Main")?;
     layout_meta.insert("status", "active")?;
 
-    let mut first_scene = None;
-    for kind in ["live", "starting_soon", "brb", "ending"] {
+    // Each scene gets a distinct theme so switching scenes in the editor
+    // re-themes the overlay live (and exercises all four themes).
+    let mut live_scene = None;
+    for (kind, theme) in [
+        ("live", "cozy"),
+        ("starting_soon", "cyber"),
+        ("brb", "editorial"),
+        ("ending", "sticker"),
+    ] {
         let scene = tree.create(layout)?;
         let scene_meta = tree.get_meta(scene)?;
         scene_meta.insert("type", "scene")?;
         scene_meta.insert("kind", kind)?;
         scene_meta.insert("name", kind)?;
-        if first_scene.is_none() {
-            first_scene = Some(scene);
+        scene_meta.insert("themeId", theme)?;
+        if live_scene.is_none() {
+            live_scene = Some(scene);
         }
     }
-    layout_meta.insert(
-        "activeSceneId",
-        first_scene.expect("four scenes were created").to_string(),
-    )?;
+    let live_scene = live_scene.expect("four scenes were created");
+    layout_meta.insert("activeSceneId", live_scene.to_string())?;
+
+    seed_default_widgets(&tree, live_scene)?;
 
     let workspace = doc.get_map(schema::WORKSPACE);
     workspace.insert("activeLayoutId", layout.to_string())?;
     workspace.insert("schemaVersion", 1)?;
 
     doc.commit();
+    Ok(())
+}
+
+/// Seed the eight v1 widgets into the live scene at sensible positions on the
+/// 1920x1080 virtual canvas. Each widget is a child node of the scene whose meta
+/// carries its type, geometry, visibility, and default props.
+fn seed_default_widgets(tree: &LoroTree, scene: TreeID) -> loro::LoroResult<()> {
+    // (widgetType, x, y, w, h, z)
+    let widgets = [
+        ("webcam-frame", 40, 40, 480, 360, 1),
+        ("alerts", 560, 60, 800, 200, 5),
+        ("chat-box", 1460, 120, 420, 640, 1),
+        ("follower-bubble", 40, 430, 440, 84, 2),
+        ("stream-info", 40, 900, 560, 96, 2),
+        ("now-playing", 1460, 940, 420, 100, 2),
+        ("goal-bar", 620, 940, 520, 56, 2),
+        ("socials", 620, 1010, 520, 48, 2),
+    ];
+    for (widget_type, x, y, w, h, z) in widgets {
+        let node = tree.create(scene)?;
+        let meta = tree.get_meta(node)?;
+        meta.insert("type", "widget")?;
+        meta.insert("widgetType", widget_type)?;
+        meta.insert("x", x)?;
+        meta.insert("y", y)?;
+        meta.insert("w", w)?;
+        meta.insert("h", h)?;
+        meta.insert("z", z)?;
+        meta.insert("visible", true)?;
+        seed_widget_props(&meta, widget_type)?;
+    }
+    Ok(())
+}
+
+/// Default props per widget type. Prop-driven widgets get starter content;
+/// event-driven widgets (chat-box, alerts, follower-bubble) render from the
+/// event bus and need none.
+fn seed_widget_props(meta: &LoroMap, widget_type: &str) -> loro::LoroResult<()> {
+    match widget_type {
+        "stream-info" => {
+            meta.insert("title", "My Stream")?;
+            meta.insert("game", "Just Chatting")?;
+        }
+        "goal-bar" => {
+            meta.insert("label", "Follower Goal")?;
+            meta.insert("current", 42)?;
+            meta.insert("target", 100)?;
+        }
+        "socials" => {
+            meta.insert("handles", "@nexus")?;
+        }
+        "now-playing" => {
+            meta.insert("track", "Untitled")?;
+            meta.insert("artist", "Unknown Artist")?;
+        }
+        "webcam-frame" => {
+            meta.insert("shape", "squircle")?;
+        }
+        _ => {}
+    }
     Ok(())
 }
 

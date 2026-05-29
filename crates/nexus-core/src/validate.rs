@@ -99,6 +99,7 @@ mod tests {
             id: id.into(),
             kind: kind.into(),
             name: kind.into(),
+            theme_id: String::new(),
         }
     }
 
