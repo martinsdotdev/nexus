@@ -43,6 +43,13 @@ impl WorkspaceRuntime {
                 persistence.save(&doc.export(loro::ExportMode::Snapshot)?)?;
             }
         }
+        // Migrate snapshots that predate the seeded built-in themes (ADR-0007):
+        // re-seed any missing built-in so scenes referencing them resolve. Idempotent
+        // and a no-op for a freshly built default, which already seeded them.
+        if default_doc::ensure_builtin_themes(&doc)? {
+            doc.commit();
+            persistence.save(&doc.export(loro::ExportMode::Snapshot)?)?;
+        }
         let (broadcast, _) = broadcast::channel(BROADCAST_CAPACITY);
         Ok(Arc::new(Self {
             doc,
@@ -186,6 +193,41 @@ mod tests {
             ws.layouts[0].scenes[0].theme_id, "cozy",
             "dangling theme repaired to the default"
         );
+    }
+
+    #[tokio::test]
+    async fn reseeds_builtin_themes_for_legacy_snapshots() {
+        let dir = tempfile::tempdir().unwrap();
+
+        // Simulate a pre-ADR-0007 snapshot: the curated default with the theme
+        // registry emptied (older relays never seeded the built-ins as data).
+        let legacy = LoroDoc::new();
+        legacy.set_peer_id(1).unwrap();
+        default_doc::build_default(&legacy).unwrap();
+        let registry = legacy.get_map(nexus_core::schema::THEMES);
+        for id in ["cozy", "cyber", "editorial", "sticker"] {
+            registry.delete(id).unwrap();
+        }
+        legacy.commit();
+        FilePersistence::new(dir.path())
+            .save(&legacy.export(loro::ExportMode::Snapshot).unwrap())
+            .unwrap();
+
+        // The relay loads the legacy snapshot and migrates the built-ins back in.
+        let runtime = WorkspaceRuntime::new(FilePersistence::new(dir.path())).unwrap();
+        let ids: Vec<String> = runtime
+            .workspace()
+            .themes
+            .iter()
+            .map(|theme| theme.id.clone())
+            .collect();
+        for id in ["cozy", "cyber", "editorial", "sticker"] {
+            assert!(ids.iter().any(|t| t == id), "{id} re-seeded on load");
+        }
+
+        // The migration persisted, so a restart needs no further re-seeding.
+        let restarted = WorkspaceRuntime::new(FilePersistence::new(dir.path())).unwrap();
+        assert_eq!(restarted.workspace().themes.len(), 4, "migration persisted");
     }
 
     #[tokio::test]

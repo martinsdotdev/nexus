@@ -42,7 +42,7 @@ pub fn build_default(doc: &LoroDoc) -> loro::LoroResult<()> {
     layout_meta.insert("activeSceneId", live_scene.to_string())?;
 
     seed_default_widgets(&tree, live_scene)?;
-    seed_builtin_themes(doc)?;
+    ensure_builtin_themes(doc)?;
 
     let workspace = doc.get_map(schema::WORKSPACE);
     workspace.insert("activeLayoutId", layout.to_string())?;
@@ -52,13 +52,21 @@ pub fn build_default(doc: &LoroDoc) -> loro::LoroResult<()> {
     Ok(())
 }
 
-/// Seed the built-in themes into the root "themes" registry (ADR-0007). Each is a
-/// nested map `{ name, base, protected, tokens }`; built-ins carry no base (they
-/// stand alone) and are `protected` so a user cannot delete the default fallback.
-/// Done only here, on the relay, so the stable ids never collide on merge (T1).
-fn seed_builtin_themes(doc: &LoroDoc) -> loro::LoroResult<()> {
+/// Ensure every built-in theme exists in the root "themes" registry (ADR-0007),
+/// seeding any that are missing. Each is a nested map `{ name, base, protected,
+/// tokens }`; built-ins carry no base (they stand alone) and are `protected` so a
+/// user cannot delete the default fallback. Idempotent: an entry already present
+/// is left untouched. Returns whether anything was added, so the caller commits +
+/// persists only on change. This both seeds a fresh document and migrates one that
+/// predates the seeded built-ins. Done only on the relay so the stable ids never
+/// collide on merge (T1); the caller commits.
+pub fn ensure_builtin_themes(doc: &LoroDoc) -> loro::LoroResult<bool> {
     let registry = doc.get_map(schema::THEMES);
+    let mut added = false;
     for theme in BUILTIN_THEMES {
+        if registry.get(theme.id).is_some() {
+            continue;
+        }
         let entry = registry.insert_container(theme.id, LoroMap::new())?;
         entry.insert("name", theme.name)?;
         entry.insert("base", "")?;
@@ -67,8 +75,9 @@ fn seed_builtin_themes(doc: &LoroDoc) -> loro::LoroResult<()> {
         for &(key, value) in theme.tokens {
             tokens.insert(key, value)?;
         }
+        added = true;
     }
-    Ok(())
+    Ok(added)
 }
 
 /// Seed the eight v1 widgets into the live scene at sensible positions on the
@@ -159,5 +168,17 @@ mod tests {
             4,
             "four built-in themes seeded into the registry"
         );
+    }
+
+    #[test]
+    fn ensure_builtin_themes_is_idempotent() {
+        let doc = LoroDoc::new();
+        // A registry missing the built-ins (a pre-ADR-0007 document): all are added.
+        assert!(ensure_builtin_themes(&doc).unwrap(), "seeds when missing");
+        doc.commit();
+        assert_eq!(doc.get_map(schema::THEMES).len(), 4);
+        // A second pass finds them all present and changes nothing.
+        assert!(!ensure_builtin_themes(&doc).unwrap(), "no-op when present");
+        assert_eq!(doc.get_map(schema::THEMES).len(), 4);
     }
 }
