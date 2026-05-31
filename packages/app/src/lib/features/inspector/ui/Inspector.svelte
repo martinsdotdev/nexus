@@ -6,6 +6,7 @@
 	// canvas/overlay and coalesce into undo steps. Editor chrome (editor tokens).
 	import type { Theme, SceneView, WidgetView } from '$lib/shared/crdt/workspace-view';
 	import { propSchemaFor } from '$lib/entities/widget';
+	import { Select } from '$lib/shared/ui';
 
 	interface Props {
 		widget: WidgetView | null;
@@ -112,14 +113,12 @@
 					<label class="field">
 						<span>{field.label}</span>
 						{#if field.type === 'select'}
-							<select
+							<Select
+								ariaLabel={field.label}
 								value={String(w.props[field.key] ?? '')}
-								onchange={(e) => onSetProp(w.id, field.key, e.currentTarget.value)}
-							>
-								{#each field.options ?? [] as option (option)}
-									<option value={option}>{option}</option>
-								{/each}
-							</select>
+								options={(field.options ?? []).map((option) => ({ value: option, label: option }))}
+								onChange={(value) => onSetProp(w.id, field.key, value)}
+							/>
 						{:else if field.type === 'number'}
 							<input
 								type="number"
@@ -145,11 +144,12 @@
 		<h2 class="title">Scene</h2>
 		<label class="field">
 			<span>Theme</span>
-			<select value={s.themeId} onchange={(e) => onSetSceneTheme(s.id, e.currentTarget.value)}>
-				{#each themes as theme (theme.id)}
-					<option value={theme.id}>{theme.name}</option>
-				{/each}
-			</select>
+			<Select
+				ariaLabel="Theme"
+				value={s.themeId}
+				options={themes.map((theme) => ({ value: theme.id, label: theme.name }))}
+				onChange={(value) => onSetSceneTheme(s.id, value)}
+			/>
 		</label>
 		<label class="field">
 			<span>Accent</span>
@@ -162,14 +162,12 @@
 		</label>
 		<label class="field">
 			<span>Density</span>
-			<select
+			<Select
+				ariaLabel="Density"
 				value={s.overridesDensity || 'normal'}
-				onchange={(e) => onSetSceneOverride(s.id, 'overridesDensity', e.currentTarget.value)}
-			>
-				{#each DENSITIES as density (density)}
-					<option value={density}>{density}</option>
-				{/each}
-			</select>
+				options={DENSITIES.map((density) => ({ value: density, label: density }))}
+				onChange={(value) => onSetSceneOverride(s.id, 'overridesDensity', value)}
+			/>
 		</label>
 		<button class="customize" onclick={() => onCustomizeTheme?.()}>Customize theme</button>
 	</div>
@@ -234,8 +232,7 @@
 	}
 
 	input[type='number'],
-	input[type='text'],
-	select {
+	input[type='text'] {
 		width: 100%;
 		min-width: 0;
 		padding: var(--space-1) var(--space-2);
@@ -247,8 +244,7 @@
 		border-radius: var(--radius-md);
 	}
 
-	input:focus-visible,
-	select:focus-visible {
+	input:focus-visible {
 		outline: none;
 		box-shadow: var(--focus-ring);
 	}

@@ -82,10 +82,8 @@ test('deleting a custom theme removes it and falls the scene back', async () => 
 test('linking a token writes a link: reference', async () => {
 	const h = handlers();
 	render(ThemeBuilder, { scene: scene('theme-1'), themes: [theme('theme-1')], ...h });
-	const select = (await page
-		.getByRole('combobox', { name: 'Link ring', exact: true })
-		.element()) as HTMLSelectElement;
-	select.value = 'primary';
-	select.dispatchEvent(new Event('change', { bubbles: true }));
+	// Ark Select (compact): open the ring token's link picker and choose primary.
+	await page.getByRole('combobox', { name: 'Link ring', exact: true }).click();
+	await page.getByRole('option', { name: 'primary', exact: true }).click();
 	expect(h.onSetThemeToken).toHaveBeenCalledWith('theme-1', 'ring', 'link:primary');
 });

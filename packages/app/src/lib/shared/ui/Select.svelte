@@ -49,6 +49,8 @@
 	value={[value]}
 	onValueChange={(details) => onChange(details.value[0] ?? '')}
 	positioning={{ sameWidth: !compact }}
+	lazyMount
+	unmountOnExit
 >
 	{#if label}<Select.Label>{label}</Select.Label>{/if}
 	<Select.Control>

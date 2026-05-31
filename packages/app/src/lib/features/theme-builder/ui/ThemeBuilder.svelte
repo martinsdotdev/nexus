@@ -16,6 +16,7 @@
 		resolveTokenValue,
 		wouldCycle
 	} from '$lib/entities/theme';
+	import { Select } from '$lib/shared/ui';
 
 	interface Props {
 		scene: SceneView | null;
@@ -119,11 +120,12 @@
 		{@const s = scene}
 		<label class="field">
 			<span>Scene theme</span>
-			<select value={activeThemeId} onchange={(e) => onSetSceneTheme(s.id, e.currentTarget.value)}>
-				{#each themes as theme (theme.id)}
-					<option value={theme.id}>{theme.name}</option>
-				{/each}
-			</select>
+			<Select
+				ariaLabel="Scene theme"
+				value={activeThemeId}
+				options={themes.map((theme) => ({ value: theme.id, label: theme.name }))}
+				onChange={(value) => onSetSceneTheme(s.id, value)}
+			/>
 		</label>
 
 		{#if activeTheme}
@@ -173,17 +175,19 @@
 							{/if}
 							{#if !ac.protected}
 								<!-- Built-ins hold literals only (the resolver's floor), so no link control. -->
-								<select
-									class="link-select"
+								<Select
+									compact
+									ariaLabel="Link {token}"
 									value={linked}
-									aria-label="Link {token}"
-									onchange={(e) => changeLink(ac, token, e.currentTarget.value)}
-								>
-									<option value="">(literal)</option>
-									{#each THEME_TOKENS.filter((other) => other !== token) as other (other)}
-										<option value={other}>{other}</option>
-									{/each}
-								</select>
+									options={[
+										{ value: '', label: '(literal)' },
+										...THEME_TOKENS.filter((other) => other !== token).map((other) => ({
+											value: other,
+											label: other
+										}))
+									]}
+									onChange={(value) => changeLink(ac, token, value)}
+								/>
 							{/if}
 						</div>
 					{/each}
@@ -295,13 +299,7 @@
 		font-family: var(--font-mono);
 	}
 
-	.link-select {
-		width: 2.4ch;
-		flex: none;
-	}
-
 	input[type='text'],
-	select,
 	textarea {
 		font: inherit;
 		font-size: var(--text-xs);
@@ -319,7 +317,6 @@
 	}
 
 	input:focus-visible,
-	select:focus-visible,
 	textarea:focus-visible {
 		outline: none;
 		box-shadow: var(--focus-ring);

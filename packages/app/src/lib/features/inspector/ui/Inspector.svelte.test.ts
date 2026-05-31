@@ -78,10 +78,8 @@ test('toggling visibility reports it', async () => {
 test('with no widget, changing the scene theme reports it', async () => {
 	const h = handlers();
 	render(Inspector, { widget: null, scene: scene(), themes, ...h });
-	const select = (await page
-		.getByRole('combobox', { name: 'Theme' })
-		.element()) as HTMLSelectElement;
-	select.value = 'cyber';
-	select.dispatchEvent(new Event('change', { bubbles: true }));
+	// Ark Select: open the listbox from the combobox trigger, then pick an option.
+	await page.getByRole('combobox', { name: 'Theme' }).click();
+	await page.getByRole('option', { name: 'Cyber' }).click();
 	expect(h.onSetSceneTheme).toHaveBeenCalledWith('s1', 'cyber');
 });
