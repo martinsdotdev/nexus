@@ -1,5 +1,12 @@
 <script lang="ts">
+	// An off-canvas drawer: Ark UI's Dialog (modal focus trap, Escape, scrim
+	// dismissal, focus restore, background inert) behind the same public API the
+	// shell already uses. We supply only the presentation: a side-pinned panel that
+	// slides via CSS keyframes keyed on Ark's [data-state], so it animates both in
+	// and out (Ark keeps the content mounted through the closing animation). Editor
+	// chrome; styled with tokens via :global on the portaled dialog parts.
 	import type { Snippet } from 'svelte';
+	import { Dialog } from '@ark-ui/svelte/dialog';
 	import { X } from 'lucide-svelte';
 
 	interface Props {
@@ -9,140 +16,64 @@
 		onClose: () => void;
 		/** Which edge the drawer slides from. */
 		side?: 'left' | 'right';
-		/** Title shown in the drawer header; also labels the dialog and the close button. */
+		/** Title shown in the drawer header; also labels the dialog and close button. */
 		title: string;
 		/** Drawer body content (typically a StudioPanel in its drawer variant). */
 		children: Snippet;
 	}
-
 	let { open, onClose, side = 'left', title, children }: Props = $props();
-
-	let panelEl = $state<HTMLElement | null>(null);
-	let previousFocus: HTMLElement | null = null;
-
-	// Focus management: capture on open, move focus into the dialog, restore on close.
-	// Mirrors CommandPalette. The drawer stays mounted, so visibility (not {#if}) gates it.
-	$effect(() => {
-		if (open) {
-			previousFocus = document.activeElement as HTMLElement | null;
-			panelEl?.focus();
-		} else if (previousFocus) {
-			previousFocus.focus();
-			previousFocus = null;
-		}
-	});
-
-	const FOCUSABLE =
-		'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
-
-	function focusable(): HTMLElement[] {
-		if (!panelEl) return [];
-		return Array.from(panelEl.querySelectorAll<HTMLElement>(FOCUSABLE)).filter(
-			(el) => el.offsetParent !== null
-		);
-	}
-
-	// Escape closes; Tab is trapped within the panel. On svelte:window so the handler
-	// does not live on the non-interactive dialog element (keeps a11y lint clean), and
-	// it no-ops unless this drawer is the open one.
-	function onWindowKeydown(event: KeyboardEvent) {
-		if (!open || !panelEl) return;
-		if (event.key === 'Escape') {
-			event.preventDefault();
-			onClose();
-			return;
-		}
-		if (event.key !== 'Tab') return;
-		const items = focusable();
-		const active = document.activeElement as HTMLElement | null;
-		if (items.length === 0) {
-			event.preventDefault();
-			panelEl.focus();
-			return;
-		}
-		const first = items[0];
-		const last = items[items.length - 1];
-		if (!active || !panelEl.contains(active)) {
-			event.preventDefault();
-			first.focus();
-		} else if (event.shiftKey && active === first) {
-			event.preventDefault();
-			last.focus();
-		} else if (!event.shiftKey && active === last) {
-			event.preventDefault();
-			first.focus();
-		}
-	}
 </script>
 
-<svelte:window onkeydown={onWindowKeydown} />
-
-<div class="backdrop" class:open class:left={side === 'left'} class:right={side === 'right'}>
-	<!-- Pointer dismissal behind the dialog; a real button for a11y, kept out of the tab
-	     order (the header close button is the in-trap keyboard affordance). -->
-	<button class="scrim" tabindex="-1" aria-label="Close {title}" onclick={onClose}></button>
-	<div
-		class="drawer"
-		role="dialog"
-		aria-modal="true"
-		aria-label={title}
-		tabindex="-1"
-		bind:this={panelEl}
-	>
-		<header class="drawer-header">
-			<span class="drawer-title">{title}</span>
-			<button class="drawer-close" aria-label="Close {title}" onclick={onClose}>
-				<X size={18} strokeWidth={1.75} />
-			</button>
-		</header>
-		<div class="drawer-body">
-			{@render children()}
-		</div>
-	</div>
-</div>
+<Dialog.Root
+	{open}
+	onOpenChange={(details) => {
+		if (!details.open) onClose();
+	}}
+	lazyMount
+	unmountOnExit
+>
+	<Dialog.Backdrop class="drawer-scrim" />
+	<Dialog.Positioner class="drawer-positioner" data-side={side}>
+		<Dialog.Content class="drawer" data-side={side}>
+			<header class="drawer-header">
+				<Dialog.Title class="drawer-title">{title}</Dialog.Title>
+				<Dialog.CloseTrigger class="drawer-close" aria-label="Close {title}">
+					<X size={18} strokeWidth={1.75} />
+				</Dialog.CloseTrigger>
+			</header>
+			<div class="drawer-body">{@render children()}</div>
+		</Dialog.Content>
+	</Dialog.Positioner>
+</Dialog.Root>
 
 <style>
-	.backdrop {
+	:global(.drawer-scrim) {
 		position: fixed;
 		inset: 0;
 		z-index: 100;
-		display: flex;
-		visibility: hidden;
-		pointer-events: none;
-		/* Delay the visibility flip to hidden until the slide-out finishes. */
-		transition: visibility 0s linear var(--dur-slow);
+		background: oklch(0% 0 0 / 0.5);
+	}
+	:global(.drawer-scrim[data-state='open']) {
+		animation: drawer-fade-in var(--dur-normal) var(--ease-out);
+	}
+	:global(.drawer-scrim[data-state='closed']) {
+		animation: drawer-fade-out var(--dur-normal) var(--ease-out);
 	}
 
-	.backdrop.left {
+	:global(.drawer-positioner) {
+		position: fixed;
+		inset: 0;
+		z-index: 101;
+		display: flex;
+	}
+	:global(.drawer-positioner[data-side='left']) {
 		justify-content: flex-start;
 	}
-
-	.backdrop.right {
+	:global(.drawer-positioner[data-side='right']) {
 		justify-content: flex-end;
 	}
 
-	.backdrop.open {
-		visibility: visible;
-		pointer-events: auto;
-		transition: visibility 0s linear 0s;
-	}
-
-	.scrim {
-		position: absolute;
-		inset: 0;
-		background: oklch(0% 0 0 / 0.5);
-		opacity: 0;
-		transition: opacity var(--dur-normal) var(--ease-out);
-		cursor: default;
-	}
-
-	.backdrop.open .scrim {
-		opacity: 1;
-	}
-
-	.drawer {
-		position: relative;
-		z-index: 1;
+	:global(.drawer) {
 		display: flex;
 		flex-direction: column;
 		width: var(--drawer-width);
@@ -152,25 +83,21 @@
 		color: var(--card-foreground);
 		box-shadow: var(--shadow-popover);
 		outline: none;
-		transition: transform var(--dur-slow) var(--ease-out);
+	}
+	:global(.drawer[data-side='left'][data-state='open']) {
+		animation: drawer-in-left var(--dur-slow) var(--ease-out);
+	}
+	:global(.drawer[data-side='left'][data-state='closed']) {
+		animation: drawer-out-left var(--dur-slow) var(--ease-out);
+	}
+	:global(.drawer[data-side='right'][data-state='open']) {
+		animation: drawer-in-right var(--dur-slow) var(--ease-out);
+	}
+	:global(.drawer[data-side='right'][data-state='closed']) {
+		animation: drawer-out-right var(--dur-slow) var(--ease-out);
 	}
 
-	.backdrop.left .drawer {
-		transform: translateX(-100%);
-	}
-
-	.backdrop.right .drawer {
-		transform: translateX(100%);
-	}
-
-	/* Side-specific so the open state outranks the closed .left/.right rules above by
-	   specificity, not merely source order. */
-	.backdrop.left.open .drawer,
-	.backdrop.right.open .drawer {
-		transform: translateX(0);
-	}
-
-	.drawer-header {
+	:global(.drawer-header) {
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
@@ -179,14 +106,13 @@
 		padding: 0 var(--space-2) 0 var(--space-3);
 		border-bottom: var(--stroke-thin) solid var(--divider);
 	}
-
-	.drawer-title {
+	:global(.drawer-title) {
+		margin: 0;
 		font-size: var(--text-sm);
 		font-weight: 600;
 		color: var(--foreground);
 	}
-
-	.drawer-close {
+	:global(.drawer-close) {
 		display: inline-flex;
 		align-items: center;
 		justify-content: center;
@@ -194,38 +120,32 @@
 		height: 32px;
 		border-radius: var(--radius-md);
 		color: var(--muted-foreground);
+		cursor: pointer;
 		transition: background var(--dur-fast) var(--ease-out);
 	}
-
-	.drawer-close:active {
+	:global(.drawer-close:active) {
 		transform: scale(var(--press-scale));
 	}
-
-	.drawer-close:focus-visible {
+	:global(.drawer-close:focus-visible) {
 		box-shadow: var(--focus-ring);
 	}
-
-	.drawer-body {
+	:global(.drawer-body) {
 		flex: 1;
 		overflow: auto;
 	}
 
-	/* Hover affordance only where a hover-capable pointer exists. */
 	@media (hover: hover) {
-		.drawer-close:hover {
+		:global(.drawer-close:hover) {
 			background: var(--accent);
 			color: var(--accent-foreground);
 		}
 	}
 
-	/* Touch: expand the close target to the 44px minimum via an overlay, so the glyph
-	   and the 40px header keep their size. */
 	@media (pointer: coarse) {
-		.drawer-close {
+		:global(.drawer-close) {
 			position: relative;
 		}
-
-		.drawer-close::after {
+		:global(.drawer-close::after) {
 			content: '';
 			position: absolute;
 			top: 50%;
@@ -233,6 +153,40 @@
 			width: var(--touch-target-min);
 			height: var(--touch-target-min);
 			transform: translate(-50%, -50%);
+		}
+	}
+
+	/* Global keyframes (the -global- prefix keeps the names literal so the :global
+	   rules above can reference them; Ark's Presence keeps the content mounted while
+	   the closing animation runs, then unmounts). */
+	@keyframes -global-drawer-fade-in {
+		from {
+			opacity: 0;
+		}
+	}
+	@keyframes -global-drawer-fade-out {
+		to {
+			opacity: 0;
+		}
+	}
+	@keyframes -global-drawer-in-left {
+		from {
+			transform: translateX(-100%);
+		}
+	}
+	@keyframes -global-drawer-out-left {
+		to {
+			transform: translateX(-100%);
+		}
+	}
+	@keyframes -global-drawer-in-right {
+		from {
+			transform: translateX(100%);
+		}
+	}
+	@keyframes -global-drawer-out-right {
+		to {
+			transform: translateX(100%);
 		}
 	}
 </style>
