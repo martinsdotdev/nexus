@@ -65,5 +65,7 @@
 	}
 	.viewers {
 		color: var(--primary);
+		/* Fixed-width digits so the live viewer count does not jitter as it updates. */
+		font-variant-numeric: tabular-nums;
 	}
 </style>

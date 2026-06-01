@@ -68,6 +68,8 @@
 		font-size: 14px;
 		color: var(--muted-foreground);
 		white-space: nowrap;
+		/* Fixed-width digits so the live count does not jitter as it ticks up. */
+		font-variant-numeric: tabular-nums;
 	}
 	.track {
 		width: 100%;
