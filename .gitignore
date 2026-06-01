@@ -6,3 +6,6 @@ node_modules/
 
 # Local Claude Code state (not shared)
 .claude/
+
+# CLAUDE.md is a per-machine symlink to the canonical AGENTS.md; not tracked.
+/CLAUDE.md
