@@ -1,4 +1,10 @@
 <script lang="ts">
+	// The scene selector: an Ark UI ToggleGroup (single-select, roving focus, real
+	// group semantics) so the active scene is chosen with proper keyboard navigation
+	// across the scrollable strip. Controlled by activeSceneId; a deselect (clicking
+	// the active scene) is ignored so a scene is always active.
+	import { ToggleGroup } from '@ark-ui/svelte/toggle-group';
+
 	interface Scene {
 		id: string;
 		label: string;
@@ -13,22 +19,25 @@
 	let { scenes, activeSceneId, onSelect }: Props = $props();
 </script>
 
-<footer class="scenestrip" aria-label="Scenes">
+<ToggleGroup.Root
+	class="scenestrip"
+	aria-label="Scenes"
+	value={[activeSceneId]}
+	onValueChange={(details) => {
+		if (details.value[0]) onSelect(details.value[0]);
+	}}
+>
 	{#each scenes as scene (scene.id)}
-		<button
-			class="scene-card"
-			class:active={scene.id === activeSceneId}
-			aria-pressed={scene.id === activeSceneId}
-			onclick={() => onSelect(scene.id)}
-		>
+		<ToggleGroup.Item value={scene.id} class="scene-card">
 			<span class="thumb" aria-hidden="true"></span>
 			<span class="scene-label">{scene.label}</span>
-		</button>
+		</ToggleGroup.Item>
 	{/each}
-</footer>
+</ToggleGroup.Root>
 
 <style>
-	.scenestrip {
+	/* The ToggleGroup root + items are Ark elements (outside this CSS scope). */
+	:global(.scenestrip) {
 		grid-area: scenestrip;
 		display: flex;
 		align-items: center;
@@ -42,27 +51,30 @@
 		scroll-snap-type: x proximity;
 	}
 
-	.scene-card {
+	:global(.scene-card) {
 		display: flex;
 		flex-direction: column;
 		gap: var(--space-1);
 		padding: var(--space-1);
 		border-radius: var(--radius-md);
 		border: var(--stroke-thicker) solid transparent;
+		background: none;
+		cursor: pointer;
 		transition: border-color var(--dur-fast) var(--ease-out);
 		scroll-snap-align: start;
 	}
 
-	.scene-card.active {
+	:global(.scene-card[data-state='on']) {
 		border-color: var(--ring);
 		background: var(--accent);
 	}
 
-	.scene-card:focus-visible {
+	:global(.scene-card:focus-visible) {
+		outline: none;
 		box-shadow: var(--focus-ring);
 	}
 
-	.thumb {
+	:global(.scene-card .thumb) {
 		height: 54px;
 		aspect-ratio: 16 / 9;
 		border-radius: var(--radius-sm);
@@ -70,25 +82,24 @@
 		border: var(--stroke-thin) solid var(--border-subtle);
 	}
 
-	.scene-label {
+	:global(.scene-card .scene-label) {
 		font-size: var(--text-xs);
 		color: var(--muted-foreground);
 		text-align: center;
 	}
 
-	.scene-card.active .scene-label {
+	:global(.scene-card[data-state='on'] .scene-label) {
 		color: var(--foreground);
 	}
 
 	@media (hover: hover) {
-		.scene-card:hover .thumb {
+		:global(.scene-card:hover .thumb) {
 			border-color: var(--border);
 		}
 	}
 
-	/* Below the floor the strip thins to 64px; shrink the thumbnail to match. */
 	@media (max-width: 639px) {
-		.thumb {
+		:global(.scene-card .thumb) {
 			height: 36px;
 		}
 	}
