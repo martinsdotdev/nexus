@@ -16,7 +16,7 @@
 		resolveTokenValue,
 		wouldCycle
 	} from '$lib/entities/theme';
-	import { Select } from '$lib/shared/ui';
+	import { Select, Collapsible } from '$lib/shared/ui';
 
 	interface Props {
 		scene: SceneView | null;
@@ -152,8 +152,7 @@
 			{/if}
 
 			{#each TOKEN_GROUPS as group (group.label)}
-				<details open>
-					<summary>{group.label}</summary>
+				<Collapsible title={group.label} open>
 					{#each group.tokens as token (token)}
 						{@const linked = linkTarget(ac.tokens, token)}
 						<div class="token-row">
@@ -191,14 +190,13 @@
 							{/if}
 						</div>
 					{/each}
-				</details>
+				</Collapsible>
 			{/each}
 
-			<details>
-				<summary>Import</summary>
+			<Collapsible title="Import">
 				<textarea bind:value={importText} rows="4" placeholder="Paste theme JSON"></textarea>
 				<button class="ghost" onclick={importTheme}>Import as new theme</button>
-			</details>
+			</Collapsible>
 		{:else}
 			<p class="hint">This scene's theme is not in the registry.</p>
 		{/if}
@@ -253,13 +251,6 @@
 
 	button.danger {
 		color: var(--destructive);
-	}
-
-	summary {
-		font-size: var(--text-xs);
-		color: var(--muted-foreground);
-		cursor: pointer;
-		padding: var(--space-1) 0;
 	}
 
 	.token-row {

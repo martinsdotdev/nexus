@@ -6,7 +6,7 @@
 	// canvas/overlay and coalesce into undo steps. Editor chrome (editor tokens).
 	import type { Theme, SceneView, WidgetView } from '$lib/shared/crdt/workspace-view';
 	import { propSchemaFor } from '$lib/entities/widget';
-	import { Select } from '$lib/shared/ui';
+	import { Select, NumberInput, Switch } from '$lib/shared/ui';
 
 	interface Props {
 		widget: WidgetView | null;
@@ -35,14 +35,6 @@
 	}: Props = $props();
 
 	const fields = $derived(widget ? propSchemaFor(widget.widgetType) : []);
-	// Number fields commit only a finite parse, so typing '-', '1.', or clearing
-	// the field is not clobbered by an immediate 0-write and a valid intermediate
-	// is never forced back mid-keystroke.
-	function onNumberInput(raw: string, write: (value: number) => void) {
-		if (raw === '') return;
-		const value = Number(raw);
-		if (Number.isFinite(value)) write(value);
-	}
 	const DENSITIES = ['normal', 'compact', 'spacious'];
 </script>
 
@@ -54,57 +46,15 @@
 		<fieldset class="group">
 			<legend>Position &amp; size</legend>
 			<div class="grid">
-				<label
-					>X<input
-						type="number"
-						value={w.x}
-						oninput={(e) =>
-							onNumberInput(e.currentTarget.value, (v) => onSetGeometry(w.id, { x: v }))}
-					/></label
-				>
-				<label
-					>Y<input
-						type="number"
-						value={w.y}
-						oninput={(e) =>
-							onNumberInput(e.currentTarget.value, (v) => onSetGeometry(w.id, { y: v }))}
-					/></label
-				>
-				<label
-					>W<input
-						type="number"
-						value={w.w}
-						oninput={(e) =>
-							onNumberInput(e.currentTarget.value, (v) => onSetGeometry(w.id, { w: v }))}
-					/></label
-				>
-				<label
-					>H<input
-						type="number"
-						value={w.h}
-						oninput={(e) =>
-							onNumberInput(e.currentTarget.value, (v) => onSetGeometry(w.id, { h: v }))}
-					/></label
-				>
-				<label
-					>Z<input
-						type="number"
-						value={w.z}
-						oninput={(e) =>
-							onNumberInput(e.currentTarget.value, (v) => onSetGeometry(w.id, { z: v }))}
-					/></label
-				>
+				<NumberInput label="X" value={w.x} onChange={(v) => onSetGeometry(w.id, { x: v })} />
+				<NumberInput label="Y" value={w.y} onChange={(v) => onSetGeometry(w.id, { y: v })} />
+				<NumberInput label="W" value={w.w} onChange={(v) => onSetGeometry(w.id, { w: v })} />
+				<NumberInput label="H" value={w.h} onChange={(v) => onSetGeometry(w.id, { h: v })} />
+				<NumberInput label="Z" value={w.z} onChange={(v) => onSetGeometry(w.id, { z: v })} />
 			</div>
 		</fieldset>
 
-		<label class="row">
-			<input
-				type="checkbox"
-				checked={w.visible}
-				onchange={(e) => onSetVisible(w.id, e.currentTarget.checked)}
-			/>
-			Visible
-		</label>
+		<Switch checked={w.visible} onChange={(v) => onSetVisible(w.id, v)} label="Visible" />
 
 		{#if fields.length}
 			<fieldset class="group">
@@ -120,11 +70,10 @@
 								onChange={(value) => onSetProp(w.id, field.key, value)}
 							/>
 						{:else if field.type === 'number'}
-							<input
-								type="number"
+							<NumberInput
+								ariaLabel={field.label}
 								value={Number(w.props[field.key] ?? 0)}
-								oninput={(e) =>
-									onNumberInput(e.currentTarget.value, (v) => onSetProp(w.id, field.key, v))}
+								onChange={(v) => onSetProp(w.id, field.key, v)}
 							/>
 						{:else}
 							<input
@@ -226,12 +175,6 @@
 		gap: var(--space-1);
 	}
 
-	.row {
-		font-size: var(--text-sm);
-		color: var(--foreground);
-	}
-
-	input[type='number'],
 	input[type='text'] {
 		width: 100%;
 		min-width: 0;

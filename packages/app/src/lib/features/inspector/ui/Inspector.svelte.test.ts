@@ -46,9 +46,6 @@ const handlers = () => ({
 async function input(name: string) {
 	return (await page.getByRole('textbox', { name }).element()) as HTMLInputElement;
 }
-async function spinbutton(name: string) {
-	return (await page.getByRole('spinbutton', { name }).element()) as HTMLInputElement;
-}
 
 test('editing a text prop reports the new value', async () => {
 	const h = handlers();
@@ -62,16 +59,16 @@ test('editing a text prop reports the new value', async () => {
 test('editing X reports the geometry change', async () => {
 	const h = handlers();
 	render(Inspector, { widget: widget(), scene: null, themes, ...h });
-	const el = await spinbutton('X');
-	el.value = '100';
-	el.dispatchEvent(new Event('input', { bubbles: true }));
+	// Ark NumberInput (role spinbutton) owns its value; type into it via fill.
+	await page.getByRole('spinbutton', { name: 'X' }).fill('100');
 	expect(h.onSetGeometry).toHaveBeenCalledWith('w1', { x: 100 });
 });
 
 test('toggling visibility reports it', async () => {
 	const h = handlers();
 	render(Inspector, { widget: widget(), scene: null, themes, ...h });
-	await page.getByRole('checkbox', { name: 'Visible' }).click();
+	// Ark Switch: the checkbox is sr-only; click the visible label/track to toggle.
+	await page.getByText('Visible').click();
 	expect(h.onSetVisible).toHaveBeenCalledWith('w1', false);
 });
 
