@@ -18,7 +18,7 @@ test('a scene activation propagates from one tab to another', async ({ browser }
 	// Find the scene currently active in Alice's tab, then target a different one.
 	let activeIndex = 0;
 	for (let i = 0; i < 4; i++) {
-		if ((await aliceCards.nth(i).getAttribute('aria-pressed')) === 'true') {
+		if ((await aliceCards.nth(i).getAttribute('aria-checked')) === 'true') {
 			activeIndex = i;
 			break;
 		}
@@ -27,6 +27,6 @@ test('a scene activation propagates from one tab to another', async ({ browser }
 
 	// Alice activates the target scene; it must light up in Bob's tab via the relay.
 	await aliceCards.nth(target).click();
-	await expect(bobCards.nth(target)).toHaveAttribute('aria-pressed', 'true');
-	await expect(aliceCards.nth(target)).toHaveAttribute('aria-pressed', 'true');
+	await expect(bobCards.nth(target)).toHaveAttribute('aria-checked', 'true');
+	await expect(aliceCards.nth(target)).toHaveAttribute('aria-checked', 'true');
 });
