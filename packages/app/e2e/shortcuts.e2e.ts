@@ -27,3 +27,18 @@ test('palette adds a widget, the titlebar undoes, and Delete removes one', async
 	await editor.keyboard.press('Delete');
 	await expect(slots).toHaveCount(7);
 });
+
+// The centered command bar in the titlebar opens the same palette as Cmd/Ctrl-K.
+test('the titlebar command bar opens the palette', async ({ browser }) => {
+	const editor = await browser.newPage();
+	await editor.setViewportSize({ width: 1440, height: 900 });
+	await editor.goto('/edit');
+
+	// Closed to start: the palette's search field is not mounted (unmountOnExit).
+	const search = editor.getByRole('textbox', { name: 'Command search' });
+	await expect(search).toHaveCount(0);
+
+	// Clicking the command bar opens the palette and focuses its search field.
+	await editor.getByRole('button', { name: 'Search commands' }).click();
+	await expect(search).toBeVisible();
+});

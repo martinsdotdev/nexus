@@ -224,6 +224,7 @@
 		canRedo={workspace?.canRedo ?? false}
 		onUndo={() => workspace?.undo()}
 		onRedo={() => workspace?.redo()}
+		onOpenPalette={() => shell.togglePalette()}
 	/>
 	<ToolRail activeToolId={shell.activeToolId} onSelect={(id) => shell.setActiveTool(id)} />
 

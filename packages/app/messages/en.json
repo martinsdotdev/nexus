@@ -19,6 +19,7 @@
 	"editor.scene.brb": "BRB",
 	"editor.scene.ending": "Ending",
 	"editor.palette.placeholder": "Type a command",
+	"editor.palette.search": "Search commands",
 	"editor.command.add_widget": "Add widget",
 	"editor.command.switch_theme": "Switch theme",
 	"editor.command.toggle_mode": "Toggle Live and Draft",

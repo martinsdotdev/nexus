@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { m } from '$lib/paraglide/messages';
-	import { Undo2, Redo2, MonitorPlay, PanelLeft, PanelRight } from 'lucide-svelte';
+	import { Undo2, Redo2, MonitorPlay, PanelLeft, PanelRight, Search } from 'lucide-svelte';
 
 	interface Props {
 		/** Whether the left widgets drawer is open (narrow viewports). */
@@ -16,6 +16,8 @@
 		canRedo: boolean;
 		onUndo: () => void;
 		onRedo: () => void;
+		/** Open the command palette (same target as the Cmd/Ctrl-K shortcut). */
+		onOpenPalette: () => void;
 	}
 
 	let {
@@ -26,7 +28,8 @@
 		canUndo,
 		canRedo,
 		onUndo,
-		onRedo
+		onRedo,
+		onOpenPalette
 	}: Props = $props();
 </script>
 
@@ -44,6 +47,20 @@
 		<span class="mark">{m['app.name']()}</span>
 		<span class="chip" title={m['editor.titlebar.draft']()}>{m['editor.titlebar.draft']()}</span>
 	</div>
+
+	<!-- Centered command-palette trigger. Styled like a search field so the action is
+	     self-evident for non-technical streamers, with a key hint that teaches the
+	     shortcut. Opens the same palette as Cmd/Ctrl-K. -->
+	<button
+		class="command-bar"
+		aria-label={m['editor.palette.search']()}
+		aria-keyshortcuts="Control+K"
+		onclick={onOpenPalette}
+	>
+		<Search size={15} />
+		<span class="command-bar-label">{m['editor.palette.search']()}</span>
+		<kbd class="command-bar-kbd">Ctrl K</kbd>
+	</button>
 
 	<div class="actions">
 		<!-- Shown when the inspector is off-canvas (medium and narrower); opens its drawer. -->
@@ -73,9 +90,13 @@
 <style>
 	.titlebar {
 		grid-area: titlebar;
-		display: flex;
+		/* Three zones (brand | command bar | actions). Equal 1fr sides keep the auto
+		   center column at the true horizontal center of the bar regardless of how wide
+		   either end is; a flex space-between would only center it in leftover space. */
+		display: grid;
+		grid-template-columns: 1fr auto 1fr;
 		align-items: center;
-		justify-content: space-between;
+		column-gap: var(--space-3);
 		height: var(--titlebar-height);
 		padding: 0 var(--space-3);
 		background: var(--titlebar);
@@ -87,6 +108,7 @@
 		display: flex;
 		align-items: center;
 		gap: var(--space-2);
+		justify-self: start;
 		min-width: 0;
 	}
 
@@ -110,10 +132,52 @@
 		letter-spacing: 0.02em;
 	}
 
+	/* The centered command-palette trigger, dressed as a recessed search field. */
+	.command-bar {
+		display: inline-flex;
+		align-items: center;
+		gap: var(--space-2);
+		justify-self: center;
+		width: min(360px, 38vw);
+		height: 28px;
+		padding: 0 var(--space-2) 0 var(--space-3);
+		border-radius: var(--radius-md);
+		background: var(--muted);
+		color: var(--muted-foreground);
+		border: var(--stroke-thin) solid var(--border-subtle);
+		font-size: var(--text-sm);
+		cursor: pointer;
+		transition:
+			border-color var(--dur-fast) var(--ease-out),
+			color var(--dur-fast) var(--ease-out);
+	}
+
+	.command-bar-label {
+		flex: 1;
+		min-width: 0;
+		text-align: left;
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+
+	.command-bar-kbd {
+		flex: none;
+		padding: 1px var(--space-1);
+		border-radius: var(--radius-sm);
+		background: var(--background);
+		border: var(--stroke-thin) solid var(--border);
+		color: var(--muted-foreground);
+		font-family: var(--font-mono);
+		font-size: var(--text-xs);
+		line-height: 1.4;
+	}
+
 	.actions {
 		display: flex;
 		align-items: center;
 		gap: var(--space-2);
+		justify-self: end;
 	}
 
 	.ghost {
@@ -159,14 +223,20 @@
 		}
 	}
 
-	/* The widgets panel goes off-canvas in the narrow zone: show its toggle. */
+	/* The widgets panel goes off-canvas in the narrow zone: show its toggle. The
+	   command bar drops its key hint here to reclaim width as the bar tightens. */
 	@media (max-width: 959px) {
 		.toggle-left {
 			display: inline-flex;
 		}
+
+		.command-bar-kbd {
+			display: none;
+		}
 	}
 
-	/* Below the floor, drop the draft chip and OBS label to reclaim width. */
+	/* Below the floor, drop the draft chip and OBS label to reclaim width, and collapse
+	   the command bar to an icon-only button so it stops competing for the row. */
 	@media (max-width: 639px) {
 		.chip {
 			display: none;
@@ -179,6 +249,16 @@
 		.primary {
 			padding: 0 var(--space-2);
 		}
+
+		.command-bar {
+			width: 28px;
+			padding: 0;
+			justify-content: center;
+		}
+
+		.command-bar-label {
+			display: none;
+		}
 	}
 
 	@media (hover: hover) {
@@ -186,14 +266,22 @@
 			background: var(--accent);
 			color: var(--accent-foreground);
 		}
+
+		.command-bar:hover {
+			border-color: var(--border);
+			color: var(--foreground);
+		}
 	}
 
-	.ghost:not(:disabled):active {
+	.ghost:not(:disabled):active,
+	.command-bar:active {
 		transform: scale(var(--press-scale));
 	}
 
 	.ghost:focus-visible,
-	.primary:focus-visible {
+	.primary:focus-visible,
+	.command-bar:focus-visible {
+		outline: none;
 		box-shadow: var(--focus-ring);
 	}
 
@@ -208,12 +296,14 @@
 	   and the dense button visuals are unaffected. */
 	@media (pointer: coarse) {
 		.ghost:not(:disabled),
-		.primary:not(:disabled) {
+		.primary:not(:disabled),
+		.command-bar {
 			position: relative;
 		}
 
 		.ghost:not(:disabled)::after,
-		.primary:not(:disabled)::after {
+		.primary:not(:disabled)::after,
+		.command-bar::after {
 			content: '';
 			position: absolute;
 			top: 50%;
