@@ -1,4 +1,5 @@
 <script lang="ts">
+	import '$lib/shared/styles/fonts.css';
 	import '$lib/shared/styles/reset.css';
 	import '$lib/shared/styles/tokens.css';
 	import favicon from '$lib/assets/favicon.svg';

@@ -1,0 +1,26 @@
+/*
+ * Self-hosted Geist (Sans + Mono), Vercel's variable typeface. tokens.css already
+ * names 'Geist' / 'Geist Mono' in --font-sans / --font-mono; these @font-face rules
+ * make those names resolve to vendored woff2 (offline, no CDN) instead of falling
+ * back to system fonts. One variable file per family covers the full 100-900 weight
+ * axis. SIL OFL 1.1 (see fonts/OFL.txt). The url() is relative so Vite fingerprints
+ * and bundles the woff2 for offline caching; the fonts lazy-load only when Geist
+ * glyphs actually render (so the /overlay route fetches them only if its theme uses
+ * Geist). font-display: swap shows fallback text immediately, then swaps in Geist.
+ */
+
+@font-face {
+	font-family: 'Geist';
+	src: url('./fonts/Geist-Variable.woff2') format('woff2');
+	font-weight: 100 900;
+	font-style: normal;
+	font-display: swap;
+}
+
+@font-face {
+	font-family: 'Geist Mono';
+	src: url('./fonts/GeistMono-Variable.woff2') format('woff2');
+	font-weight: 100 900;
+	font-style: normal;
+	font-display: swap;
+}
