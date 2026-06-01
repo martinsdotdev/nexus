@@ -1313,6 +1313,7 @@ The architectural decisions in §1–15 are framework-agnostic. This section nam
 | Drag-drop | Hand-rolled pointer-event handlers in the editor canvas | Free-position canvas; ~150 lines for the snap-to-edge + smart-guides algorithm. Reconsider `pragmatic-drag-and-drop` if accessibility or touch edges appear. |
 | Animation | Svelte built-ins (`svelte/transition`, `svelte/motion`) + GSAP if a specific overlay-runtime moment needs it | Editor stays restrained; overlay-runtime gets expressive motion. |
 | Iconography | `lucide-svelte` | Direct port of Lucide for Svelte. |
+| Headless UI components | `@ark-ui/svelte` (Zag.js machines) behind `shared/ui` wrappers, + `culori` for oklch conversion | Accessible Select / Dialog / NumberInput / Switch / Collapsible / Color Picker / Tooltip / ToggleGroup, styled with the token system. Editor-only; the `/overlay` bundle stays Ark-free. Per [ADR-0008](../../decisions/0008-adopt-ark-ui.md). |
 | Styling | Svelte scoped `<style>` blocks + CSS custom properties (from `tokens.css`) | No CSS Modules needed, Svelte's scoping is built-in. |
 | CSS reset | `modern-normalize` | ~2 KB; focused on real cross-browser issues. |
 | Schema mirror | Generated from Rust via `ts-rs`; no separate TS validation library needed | Server is the validation authority; client trusts the contract. |
