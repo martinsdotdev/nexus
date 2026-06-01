@@ -4,3 +4,4 @@
 export * from './model/tokens';
 export { resolveThemeStyle, type ResolvedThemeStyle } from './lib/resolve-theme-style';
 export { resolveTokenValue, wouldCycle } from './lib/link-graph';
+export { oklchToHex, colorToOklch } from './lib/oklch-color';

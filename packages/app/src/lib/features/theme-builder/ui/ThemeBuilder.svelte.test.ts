@@ -34,15 +34,16 @@ const theme = (id: string, opts: Partial<Theme> = {}): Theme => ({
 
 const cozy = theme('cozy', { name: 'Cozy', protected: true });
 
-test('editing a token in place reports the new value', async () => {
+test('editing a non-color token in place reports the new value', async () => {
 	const h = handlers();
 	render(ThemeBuilder, { scene: scene('cozy'), themes: [cozy], ...h });
+	// Color tokens are now visual ColorFields; radius is a non-color text field.
 	const el = (await page
-		.getByRole('textbox', { name: 'primary', exact: true })
+		.getByRole('textbox', { name: 'radius', exact: true })
 		.element()) as HTMLInputElement;
-	el.value = 'green';
+	el.value = '12px';
 	el.dispatchEvent(new Event('input', { bubbles: true }));
-	expect(h.onSetThemeToken).toHaveBeenCalledWith('cozy', 'primary', 'green');
+	expect(h.onSetThemeToken).toHaveBeenCalledWith('cozy', 'radius', '12px');
 });
 
 test('duplicate forks the active built-in, deriving the copy from it', async () => {

@@ -21,11 +21,15 @@ test('a theme authored in the editor renders on the overlay', async ({ browser }
 	const panel = editor.locator('.dock-right');
 	await panel.getByRole('button', { name: 'Customize theme' }).click();
 	await panel.getByRole('button', { name: 'Duplicate' }).click();
-	await panel.getByRole('textbox', { name: 'primary', exact: true }).fill('rgb(1, 2, 3)');
+	// primary is a visual ColorField; open it and set it to black via the hex field.
+	await panel.getByRole('button', { name: 'primary', exact: true }).click();
+	const hex = editor.getByRole('textbox', { name: 'Hex' });
+	await hex.fill('000000');
+	await hex.press('Enter');
 
-	// The overlay's canvas carries the resolved theme inline.
+	// Black -> oklch(0% 0 0); the overlay carries the resolved theme inline and re-themes.
 	await expect(overlay.locator('.overlay-canvas')).toHaveAttribute(
 		'style',
-		/--primary:\s*rgb\(1, 2, 3\)/
+		/--primary:\s*oklch\(0% 0 0\)/
 	);
 });

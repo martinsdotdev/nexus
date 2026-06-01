@@ -14,9 +14,11 @@
 		TOKEN_GROUPS,
 		isColorToken,
 		resolveTokenValue,
-		wouldCycle
+		wouldCycle,
+		oklchToHex,
+		colorToOklch
 	} from '$lib/entities/theme';
-	import { Select, Collapsible } from '$lib/shared/ui';
+	import { Select, Collapsible, ColorField } from '$lib/shared/ui';
 
 	interface Props {
 		scene: SceneView | null;
@@ -159,11 +161,13 @@
 							<span class="token-label">{token}</span>
 							{#if linked}
 								<span class="linked" title="Linked to {linked}">&rarr; {linked}</span>
+							{:else if isColorToken(token)}
+								<ColorField
+									ariaLabel={token}
+									value={oklchToHex(ac.tokens[token] ?? '')}
+									onChange={(color) => onSetThemeToken(ac.id, token, colorToOklch(color))}
+								/>
 							{:else}
-								{#if isColorToken(token)}
-									<span class="swatch" style="background: {ac.tokens[token] || 'transparent'};"
-									></span>
-								{/if}
 								<input
 									class="token-input"
 									type="text"
@@ -268,14 +272,6 @@
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
-	}
-
-	.swatch {
-		width: 16px;
-		height: 16px;
-		flex: none;
-		border-radius: var(--radius-sm);
-		border: var(--stroke-thin) solid var(--border);
 	}
 
 	.token-input {
