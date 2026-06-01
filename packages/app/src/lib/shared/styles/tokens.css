@@ -19,9 +19,9 @@
 /* Non-themed tokens: identical in dark and light. */
 :root {
 	/* Typography */
-	--font-sans: 'Geist', system-ui, sans-serif;
+	--font-sans: 'Geist', 'Geist Fallback', system-ui, sans-serif;
 	--font-serif: 'Instrument Serif', Georgia, serif;
-	--font-mono: 'Geist Mono', 'JetBrains Mono', ui-monospace, monospace;
+	--font-mono: 'Geist Mono', 'Geist Mono Fallback', 'JetBrains Mono', ui-monospace, monospace;
 
 	--text-xs: 11px;
 	--text-sm: 13px;

@@ -24,3 +24,28 @@
 	font-style: normal;
 	font-display: swap;
 }
+
+/*
+ * Metric-adjusted fallback faces. While Geist loads, the browser paints a local system
+ * font (Arial / Courier New) scaled via size-adjust + ascent/descent overrides to fill
+ * Geist's exact box, so the font-display: swap produces no layout shift (CLS). The token
+ * stacks (tokens.css) place these right after Geist, before the generic tail. Descriptors
+ * are generated from the vendored woff2 by scripts/generate-font-fallbacks.mjs (Capsize);
+ * regenerate if the fonts change.
+ */
+@font-face {
+	font-family: 'Geist Fallback';
+	src: local('Arial'), local('ArialMT');
+	ascent-override: 95.9379%;
+	descent-override: 28.1609%;
+	line-gap-override: 0%;
+	size-adjust: 104.7553%;
+}
+
+@font-face {
+	font-family: 'Geist Mono Fallback';
+	src: local('Courier New'), local('CourierNewPSMT');
+	ascent-override: 100.5164%;
+	descent-override: 29.5048%;
+	size-adjust: 99.9837%;
+}
