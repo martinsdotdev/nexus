@@ -24,6 +24,9 @@ vite.config.ts.timestamp-*
 # Playwright
 test-results
 .e2e-data
+
+# Local relay snapshot data (dev runs: --data-dir packages/app/.run-data)
+.run-data
 # Paraglide
 src/lib/paraglide
 project.inlang/cache/

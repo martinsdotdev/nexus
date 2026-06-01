@@ -3,3 +3,6 @@
 
 # pnpm workspace root node_modules (per-package builds ignore their own)
 node_modules/
+
+# Local Claude Code state (not shared)
+.claude/
