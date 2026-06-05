@@ -26,5 +26,20 @@
 	"editor.command.open_layout": "Open layout",
 	"editor.command.use_in_obs": "Use in OBS",
 	"editor.command.fire_test_alert": "Fire test alert",
-	"editor.canvas.dimensions": "1920 x 1080"
+	"editor.canvas.dimensions": "1920 x 1080",
+	"login.title": "Sign in to Nexus",
+	"login.subtitle": "One overlay, not seven services.",
+	"login.email_label": "Email",
+	"login.email_placeholder": "you@example.com",
+	"login.send_code": "Send code",
+	"login.sending": "Sending…",
+	"login.code_label": "Verification code",
+	"login.code_hint": "Enter the 8-character code sent to {email}.",
+	"login.verify": "Sign in",
+	"login.verifying": "Signing in…",
+	"login.use_different_email": "Use a different email",
+	"login.error_email": "Enter a valid email address.",
+	"login.error_code": "That code is not right. Check it and try again.",
+	"login.error_rate_limited": "Too many tries. Wait a minute, then try again.",
+	"login.error_network": "Could not reach the server. Try again."
 }
