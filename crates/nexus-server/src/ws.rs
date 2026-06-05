@@ -29,11 +29,13 @@ use crate::registry::WorkspaceRegistry;
 /// presence back to itself.
 static NEXT_CONN: AtomicU64 = AtomicU64::new(1);
 
-/// Query parameters on the `/sync` upgrade. `workspace` selects the workspace in cloud
-/// mode (a UUID string); it is ignored in local mode (which has one workspace).
+/// Query parameters on the `/sync` upgrade. In cloud mode, `workspace` (a UUID string)
+/// selects the workspace for a cookie-authenticated editor, or `token` carries an
+/// overlay read-only token (the OBS path). Both are ignored in local mode.
 #[derive(Debug, Deserialize)]
 pub struct SyncParams {
     workspace: Option<String>,
+    token: Option<String>,
 }
 
 /// What a connection is allowed to do, resolved from auth + membership before the
@@ -71,6 +73,21 @@ async fn resolve_access(
             can_write: true,
         });
     };
+
+    // Overlay read-only token path (OBS): no cookie, anonymous, read-only. The token
+    // itself names the workspace.
+    if let Some(token) = params.token.as_deref() {
+        let workspace = cloud
+            .overlay_tokens
+            .validate(token)
+            .await
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+            .ok_or(StatusCode::UNAUTHORIZED)?;
+        return Ok(Access {
+            workspace,
+            can_write: false,
+        });
+    }
 
     let raw = params.workspace.as_deref().ok_or(StatusCode::BAD_REQUEST)?;
     let workspace = WorkspaceId(Uuid::parse_str(raw).map_err(|_| StatusCode::BAD_REQUEST)?);
@@ -191,6 +208,7 @@ mod tests {
     use crate::auth::session::SessionStore;
     use crate::http::CloudAuth;
     use crate::persistence::FilePersistence;
+    use crate::workspaces::overlay_token::OverlayTokenStore;
     use crate::workspaces::store::WorkspaceStore;
     use axum_extra::extract::cookie::Cookie;
     use sqlx::PgPool;
@@ -221,6 +239,7 @@ mod tests {
                 emails: EmailStore::new(pool.clone()),
                 sender: EmailSender::Log,
                 workspaces: WorkspaceStore::new(pool.clone()),
+                overlay_tokens: OverlayTokenStore::new(pool.clone()),
             }),
         };
         (container, tmp, pool, state)
@@ -243,6 +262,7 @@ mod tests {
     fn params_for(workspace: WorkspaceId) -> SyncParams {
         SyncParams {
             workspace: Some(workspace.0.to_string()),
+            token: None,
         }
     }
 
@@ -255,9 +275,16 @@ mod tests {
             cloud: None,
         };
 
-        let access = resolve_access(&state, &SyncParams { workspace: None }, &CookieJar::new())
-            .await
-            .unwrap();
+        let access = resolve_access(
+            &state,
+            &SyncParams {
+                workspace: None,
+                token: None,
+            },
+            &CookieJar::new(),
+        )
+        .await
+        .unwrap();
 
         assert_eq!(access.workspace, WorkspaceId::LOCAL);
         assert!(access.can_write);
@@ -342,8 +369,64 @@ mod tests {
         let (_c, _tmp, _pool, state) = cloud_state().await;
 
         assert_eq!(
-            resolve_access(&state, &SyncParams { workspace: None }, &CookieJar::new()).await,
+            resolve_access(
+                &state,
+                &SyncParams {
+                    workspace: None,
+                    token: None,
+                },
+                &CookieJar::new()
+            )
+            .await,
             Err(StatusCode::BAD_REQUEST)
+        );
+    }
+
+    #[tokio::test]
+    async fn an_overlay_token_resolves_to_read_only_access() {
+        let (_c, _tmp, pool, state) = cloud_state().await;
+        let cloud = state.cloud.as_ref().unwrap();
+        let owner = seed_user(&pool).await;
+        let ws = cloud
+            .workspaces
+            .create_with_owner(owner, "W")
+            .await
+            .unwrap();
+        let token = cloud.overlay_tokens.mint(ws).await.unwrap();
+
+        let params = SyncParams {
+            workspace: None,
+            token: Some(token),
+        };
+        let access = resolve_access(&state, &params, &CookieJar::new())
+            .await
+            .unwrap();
+
+        assert_eq!(access.workspace, ws);
+        assert!(!access.can_write, "an overlay token is read-only");
+    }
+
+    #[tokio::test]
+    async fn a_revoked_overlay_token_is_unauthorized() {
+        let (_c, _tmp, pool, state) = cloud_state().await;
+        let cloud = state.cloud.as_ref().unwrap();
+        let owner = seed_user(&pool).await;
+        let ws = cloud
+            .workspaces
+            .create_with_owner(owner, "W")
+            .await
+            .unwrap();
+        let token = cloud.overlay_tokens.mint(ws).await.unwrap();
+        let (id, _) = crate::auth::session_token::parse_token(&token).unwrap();
+        cloud.overlay_tokens.revoke(id).await.unwrap();
+
+        let params = SyncParams {
+            workspace: None,
+            token: Some(token.clone()),
+        };
+        assert_eq!(
+            resolve_access(&state, &params, &CookieJar::new()).await,
+            Err(StatusCode::UNAUTHORIZED)
         );
     }
 }

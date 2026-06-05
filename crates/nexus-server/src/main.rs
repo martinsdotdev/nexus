@@ -55,6 +55,9 @@ async fn main() -> anyhow::Result<()> {
                                 None => auth::email_sender::EmailSender::Log,
                             },
                             workspaces: workspaces::store::WorkspaceStore::new(pool.clone()),
+                            overlay_tokens: workspaces::overlay_token::OverlayTokenStore::new(
+                                pool.clone(),
+                            ),
                         };
                         (Some(cloud), Arc::new(DatabasePersistence::new(pool)))
                     }

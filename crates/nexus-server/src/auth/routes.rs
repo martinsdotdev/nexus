@@ -237,6 +237,7 @@ mod tests {
     use crate::http::build_app;
     use crate::persistence::FilePersistence;
     use crate::registry::WorkspaceRegistry;
+    use crate::workspaces::overlay_token::OverlayTokenStore;
     use crate::workspaces::store::WorkspaceStore;
 
     use super::super::email::EmailStore;
@@ -282,6 +283,7 @@ mod tests {
                 emails: EmailStore::new(pool.clone()),
                 sender: EmailSender::Capture(mailbox.clone()),
                 workspaces: WorkspaceStore::new(pool.clone()),
+                overlay_tokens: OverlayTokenStore::new(pool.clone()),
             }),
         };
         (container, tmp, state, pool, mailbox)

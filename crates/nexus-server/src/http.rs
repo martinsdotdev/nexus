@@ -12,6 +12,7 @@ use crate::auth::email::EmailStore;
 use crate::auth::email_sender::EmailSender;
 use crate::auth::session::SessionStore;
 use crate::registry::WorkspaceRegistry;
+use crate::workspaces::overlay_token::OverlayTokenStore;
 use crate::workspaces::store::WorkspaceStore;
 use crate::ws::sync_handler;
 
@@ -24,6 +25,7 @@ pub struct CloudAuth {
     pub emails: EmailStore,
     pub sender: EmailSender,
     pub workspaces: WorkspaceStore,
+    pub overlay_tokens: OverlayTokenStore,
 }
 
 /// Shared application state. `registry` is always present (the relay's live workspace
