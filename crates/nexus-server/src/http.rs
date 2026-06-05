@@ -12,6 +12,7 @@ use crate::auth::email::EmailStore;
 use crate::auth::email_sender::EmailSender;
 use crate::auth::session::SessionStore;
 use crate::registry::WorkspaceRegistry;
+use crate::workspaces::store::WorkspaceStore;
 use crate::ws::sync_handler;
 
 /// The cloud-mode authentication subsystem, present together or not at all (one "cloud
@@ -22,6 +23,7 @@ pub struct CloudAuth {
     pub sessions: SessionStore,
     pub emails: EmailStore,
     pub sender: EmailSender,
+    pub workspaces: WorkspaceStore,
 }
 
 /// Shared application state. `registry` is always present (the relay's live workspace

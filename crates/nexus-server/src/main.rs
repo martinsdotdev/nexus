@@ -54,6 +54,7 @@ async fn main() -> anyhow::Result<()> {
                                 Some(path) => auth::email_sender::EmailSender::File(path.clone()),
                                 None => auth::email_sender::EmailSender::Log,
                             },
+                            workspaces: workspaces::store::WorkspaceStore::new(pool.clone()),
                         };
                         (Some(cloud), Arc::new(DatabasePersistence::new(pool)))
                     }

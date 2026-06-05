@@ -19,6 +19,13 @@ pub enum Role {
     Viewer,
 }
 
+impl Role {
+    /// Whether this role may write to the document. Viewers are read-only.
+    pub fn can_write(self) -> bool {
+        matches!(self, Role::Owner | Role::Editor)
+    }
+}
+
 /// A workspace the caller belongs to, with their role in it.
 #[derive(Debug, PartialEq, Eq)]
 pub struct WorkspaceSummary {

@@ -237,6 +237,7 @@ mod tests {
     use crate::http::build_app;
     use crate::persistence::FilePersistence;
     use crate::registry::WorkspaceRegistry;
+    use crate::workspaces::store::WorkspaceStore;
 
     use super::super::email::EmailStore;
     use super::super::email_sender::EmailSender;
@@ -280,6 +281,7 @@ mod tests {
                 sessions: SessionStore::new(pool.clone()),
                 emails: EmailStore::new(pool.clone()),
                 sender: EmailSender::Capture(mailbox.clone()),
+                workspaces: WorkspaceStore::new(pool.clone()),
             }),
         };
         (container, tmp, state, pool, mailbox)
