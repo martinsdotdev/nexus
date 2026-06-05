@@ -1,6 +1,8 @@
 <script lang="ts">
 	import { m } from '$lib/paraglide/messages';
 	import { Undo2, Redo2, MonitorPlay, PanelLeft, PanelRight, Search } from 'lucide-svelte';
+	import Roster from '$lib/features/presence/ui/Roster.svelte';
+	import type { PeerPresence } from '$lib/shared/crdt/presence';
 
 	interface Props {
 		/** Whether the left widgets drawer is open (narrow viewports). */
@@ -18,6 +20,8 @@
 		onRedo: () => void;
 		/** Open the command palette (same target as the Cmd/Ctrl-K shortcut). */
 		onOpenPalette: () => void;
+		/** Other collaborators present in this workspace (shown as a roster). */
+		remotePeers?: PeerPresence[];
 	}
 
 	let {
@@ -29,7 +33,8 @@
 		canRedo,
 		onUndo,
 		onRedo,
-		onOpenPalette
+		onOpenPalette,
+		remotePeers = []
 	}: Props = $props();
 </script>
 
@@ -63,6 +68,8 @@
 	</button>
 
 	<div class="actions">
+		<Roster peers={remotePeers} />
+
 		<!-- Shown when the inspector is off-canvas (medium and narrower); opens its drawer. -->
 		<button
 			class="ghost toggle-right"

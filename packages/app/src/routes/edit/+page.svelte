@@ -256,6 +256,7 @@
 		onUndo={() => workspace?.undo()}
 		onRedo={() => workspace?.redo()}
 		onOpenPalette={() => shell.togglePalette()}
+		remotePeers={workspace?.remotePeers ?? []}
 	/>
 	<ToolRail activeToolId={shell.activeToolId} onSelect={(id) => shell.setActiveTool(id)} />
 
