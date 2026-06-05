@@ -4,7 +4,11 @@
 //! Postgres-backed store, the cookie + CSRF layer, and the routes that consume it
 //! follow in the same increment.
 
-// The token core is exercised by its own unit tests but not yet wired into a store or
-// route, so its public functions read as dead code until the store lands next.
 #[allow(dead_code)]
 pub mod session_token;
+
+// The Postgres session store, built on the token core and exercised by its own
+// (testcontainers) integration tests, but not yet wired into a route or the /sync
+// gate; that wiring (and the dead_code removal) lands in the next increments.
+#[allow(dead_code)]
+pub mod session;

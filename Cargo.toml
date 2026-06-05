@@ -34,3 +34,7 @@ subtle = "2"
 # only in cloud mode (NEXUS_DATABASE_URL set); local file mode does not build a pool.
 sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio", "tls-rustls", "postgres", "macros", "migrate", "uuid", "chrono"] }
 axum-extra = { version = "0.10", features = ["cookie"] }
+uuid = { version = "1", features = ["v4"] }
+chrono = "0.4"
+# Test-only: an ephemeral Postgres per integration-test run (needs Docker at test time).
+testcontainers-modules = { version = "0.12", features = ["postgres"] }

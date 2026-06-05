@@ -23,3 +23,8 @@ base64.workspace = true
 subtle.workspace = true
 sqlx.workspace = true
 axum-extra.workspace = true
+uuid.workspace = true
+chrono.workspace = true
+
+[dev-dependencies]
+testcontainers-modules.workspace = true
