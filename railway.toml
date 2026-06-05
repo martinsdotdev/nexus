@@ -1,9 +1,9 @@
-# Railway service config for the Nexus relay. Builds the Dockerfile, runs the one
-# binary that serves the UI + /sync. The start command is the authoritative launch
-# line: Railway runs it in a shell, so it expands $PORT and the volume mount path and
-# forces --host 0.0.0.0 (the binary's own default stays 127.0.0.1 for local-first use).
-# Keep --static-dir and healthcheckPath in sync: GET / returns index.html (200) only
-# while the UI is served, which is what the healthcheck probes.
+# Railway service config for the Nexus relay. Builds the Dockerfile and runs the one
+# binary that serves the UI + /sync. The image's CMD is the launch path: a shell-form
+# command that expands the Railway-injected $PORT and the volume mount path and forces
+# --host 0.0.0.0 (the binary's own default stays 127.0.0.1 for local-first use), so no
+# startCommand is set here. The healthcheck hits GET / which returns index.html (200)
+# because the CMD passes --static-dir; keep those two in sync.
 #
 # Constraints: run a single replica only (the canonical Loro doc is in process memory
 # and persists to one volume; replicas would diverge). Attach a volume so
@@ -15,7 +15,6 @@ builder = "DOCKERFILE"
 dockerfilePath = "Dockerfile"
 
 [deploy]
-startCommand = "/usr/local/bin/nexus serve --host 0.0.0.0 --port $PORT --static-dir /srv/ui --data-dir ${RAILWAY_VOLUME_MOUNT_PATH:-/data}"
 healthcheckPath = "/"
 healthcheckTimeout = 300
 restartPolicyType = "ON_FAILURE"

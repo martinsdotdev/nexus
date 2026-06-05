@@ -17,8 +17,7 @@ RUN corepack enable && corepack prepare pnpm@10 --activate
 # Lockfile + workspace manifest live at the repo root; app manifest under packages/app.
 COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
 COPY packages/app/package.json packages/app/package.json
-RUN --mount=type=cache,id=pnpm-store,target=/root/.local/share/pnpm/store \
-    pnpm install --frozen-lockfile
+RUN pnpm install --frozen-lockfile
 COPY packages/app packages/app
 RUN pnpm -F app build
 # Output: /app/packages/app/build (adapter-static, 200.html SPA fallback)
@@ -36,28 +35,29 @@ RUN cargo chef prepare --recipe-path recipe.json
 # ---- Stage 2b: build nexus-server (release) -------------------------------
 FROM chef AS rust-build
 COPY --from=planner /src/recipe.json recipe.json
-# Compile + cache all dependencies first (busts only on Cargo.toml / Cargo.lock change).
-RUN --mount=type=cache,target=/usr/local/cargo/registry \
-    cargo chef cook --release --recipe-path recipe.json
+# Compile all dependencies first. This is a cached Docker layer that busts only when
+# Cargo.toml / Cargo.lock (the recipe) changes, which is cargo-chef's main speedup.
+RUN cargo chef cook --release --recipe-path recipe.json
 COPY Cargo.toml Cargo.lock ./
 COPY crates crates
-RUN --mount=type=cache,target=/usr/local/cargo/registry \
-    cargo build --release --locked -p nexus-server
+RUN cargo build --release --locked -p nexus-server
 # Output: /src/target/release/nexus-server
 
 # ---- Stage 3: minimal runtime ---------------------------------------------
-# Run as root (the default distroless user), not :nonroot. The relay writes its
-# snapshot to the mounted volume on startup; a freshly provisioned Railway/Docker
-# volume at the data dir is root-owned, so a non-root uid hits EACCES on the first
-# write (verified locally). Root writes any volume regardless of how the platform
-# provisions it; acceptable for a hosted single-tenant relay (Railway isolates the
-# container). The local-first binary is unaffected (this is the hosted image only).
-FROM gcr.io/distroless/cc-debian12 AS runtime
+# debian-slim, NOT distroless: the launch command needs a real shell to expand the
+# Railway-injected $PORT and the volume mount path. A distroless image has no /bin/sh,
+# so "$PORT" never expands and the container fails its healthcheck (verified: the
+# distroless deploy never became reachable). Runs as root by default, so it can write
+# the mounted volume (a freshly provisioned volume is root-owned; a non-root uid hits
+# EACCES on the first snapshot write). glibc base matches the dynamically-linked
+# binary; the relay makes no outbound TLS calls, so no ca-certificates are needed.
+# The local-first binary is unaffected; this is the hosted image only.
+FROM debian:bookworm-slim AS runtime
 WORKDIR /srv
 COPY --from=rust-build /src/target/release/nexus-server /usr/local/bin/nexus
 COPY --from=ui /app/packages/app/build /srv/ui
 EXPOSE 7777
-# Railway overrides this via deploy.startCommand (run in a shell, which expands
-# $PORT and the volume mount path). This default is for a plain `docker run`.
-ENTRYPOINT ["/usr/local/bin/nexus"]
-CMD ["serve", "--host", "0.0.0.0", "--static-dir", "/srv/ui", "--data-dir", "/data"]
+# Shell-form so the container itself expands $PORT (Railway-injected) and the volume
+# mount path; `exec` makes the binary PID 1 so it receives signals. This is the single
+# launch path: railway.toml sets no startCommand, so Railway runs this CMD as-is.
+CMD ["sh", "-c", "exec /usr/local/bin/nexus serve --host 0.0.0.0 --port ${PORT:-7777} --static-dir /srv/ui --data-dir ${RAILWAY_VOLUME_MOUNT_PATH:-/data}"]
