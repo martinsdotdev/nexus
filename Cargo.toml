@@ -24,3 +24,9 @@ clap = { version = "4", features = ["derive"] }
 figment = { version = "0.10", features = ["env"] }
 dirs = "6"
 tempfile = "3"
+# Auth (ADR-0010). Session-token core: fast hash for the high-entropy session secret,
+# OS RNG for id/secret, URL-safe encoding for the cookie token, constant-time compare.
+sha2 = "0.10"
+getrandom = "0.2"
+base64 = "0.22"
+subtle = "2"

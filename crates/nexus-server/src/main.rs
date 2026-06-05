@@ -5,6 +5,7 @@
 //! Deployable locally or hosted via the same binary (env-configured). See
 //! ADR-0005 and the implementation plan.
 
+mod auth;
 mod cli;
 mod http;
 mod persistence;
