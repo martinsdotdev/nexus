@@ -1,0 +1,19 @@
+# Build outputs / caches that must never enter the build context (target/ is multi-GB).
+target/
+**/node_modules/
+packages/app/build/
+.svelte-kit/
+
+# Local runtime + test data (would bloat the context and could leak local state).
+.run-data/
+.e2e-data/
+
+# VCS + agent tooling.
+.git/
+.jj/
+.claude/
+.agents/
+
+# Docker artifacts themselves.
+Dockerfile
+.dockerignore
