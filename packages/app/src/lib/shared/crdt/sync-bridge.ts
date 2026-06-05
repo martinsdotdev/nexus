@@ -8,12 +8,14 @@ import { decodeFrame, encodeFrame } from './protocol';
 
 export interface SyncConnection {
 	close(): void;
+	/** Ship an opaque presence frame to the relay, which forwards it to other peers. */
+	sendPresence(bytes: Uint8Array): void;
 }
 
 export function connectSync(
 	doc: LoroDoc,
 	url: string,
-	options: { readonly?: boolean } = {}
+	options: { readonly?: boolean; onPresence?: (bytes: Uint8Array) => void } = {}
 ): SyncConnection {
 	const ws = new WebSocket(url);
 	ws.binaryType = 'arraybuffer';
@@ -36,8 +38,11 @@ export function connectSync(
 
 	ws.onmessage = (event) => {
 		const frame = decodeFrame(new Uint8Array(event.data as ArrayBuffer));
-		if (frame && (frame.kind === 'snapshot' || frame.kind === 'update')) {
+		if (!frame) return;
+		if (frame.kind === 'snapshot' || frame.kind === 'update') {
 			doc.import(frame.payload);
+		} else if (frame.kind === 'presence') {
+			options.onPresence?.(frame.payload);
 		}
 	};
 
@@ -45,6 +50,11 @@ export function connectSync(
 		close() {
 			unsubscribe();
 			ws.close();
+		},
+		sendPresence(bytes) {
+			if (ws.readyState === WebSocket.OPEN) {
+				ws.send(encodeFrame({ kind: 'presence', payload: bytes }));
+			}
 		}
 	};
 }

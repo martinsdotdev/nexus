@@ -15,6 +15,7 @@ import {
 } from './workspace-view';
 import * as mutate from './mutations';
 import type { WidgetGeometry } from './mutations';
+import { createPresence, type PeerIdentity, type PeerPresence, type Presence } from './presence';
 
 const TREE = 'tree';
 const WORKSPACE = 'workspace';
@@ -25,6 +26,12 @@ export interface WorkspaceClient {
 	readonly workspace: WorkspaceView;
 	readonly canUndo: boolean;
 	readonly canRedo: boolean;
+	/** Other editors currently present (cursors, selections), de-duped by account. */
+	readonly remotePeers: PeerPresence[];
+	/** Share this editor's pointer position (virtual canvas coordinates). */
+	setCursor(x: number, y: number): void;
+	/** Share this editor's current widget selection. */
+	setSelection(ids: string[]): void;
 	activate(sceneId: string): void;
 	setWidgetGeometry(id: string, geom: Partial<WidgetGeometry>): void;
 	setWidgetZ(id: string, z: number): void;
@@ -50,14 +57,31 @@ export interface WorkspaceClient {
 	dispose(): void;
 }
 
-export function createWorkspaceClient(url: string): WorkspaceClient {
+export function createWorkspaceClient(
+	url: string,
+	options: { identity?: PeerIdentity } = {}
+): WorkspaceClient {
 	const doc = new LoroDoc();
 	let version = $state(0);
 
 	const unsubscribe = doc.subscribe(() => {
 		version += 1;
 	});
-	const sync: SyncConnection = connectSync(doc, url);
+
+	// Ephemeral presence (cursors, selections, identity), wired to the relay's presence
+	// channel. Disabled when there is no identity (local mode has no signed-in account).
+	let presenceVersion = $state(0);
+	let presence: Presence | undefined;
+	const sync: SyncConnection = connectSync(doc, url, {
+		onPresence: (bytes) => presence?.apply(bytes)
+	});
+	let presenceUnsub = () => {};
+	if (options.identity) {
+		presence = createPresence(options.identity, (bytes) => sync.sendPresence(bytes));
+		presenceUnsub = presence.subscribe(() => {
+			presenceVersion += 1;
+		});
+	}
 
 	// Local undo over THIS peer's edits only; remote merges + relay repairs are a
 	// different peer and never land on the stack. mergeInterval 0 keeps each commit
@@ -102,6 +126,16 @@ export function createWorkspaceClient(url: string): WorkspaceClient {
 		get canRedo(): boolean {
 			void version;
 			return undo.canRedo();
+		},
+		get remotePeers(): PeerPresence[] {
+			void presenceVersion;
+			return presence?.remotePeers() ?? [];
+		},
+		setCursor(x, y) {
+			presence?.setCursor(x, y);
+		},
+		setSelection(ids) {
+			presence?.setSelection(ids);
 		},
 		activate(sceneId: string) {
 			tx(() => {
@@ -161,6 +195,8 @@ export function createWorkspaceClient(url: string): WorkspaceClient {
 			undo.redo();
 		},
 		dispose() {
+			presenceUnsub();
+			presence?.destroy();
 			unsubscribe();
 			sync.close();
 			undo.free();
