@@ -1,2 +1,9 @@
 packages:
   - 'packages/*'
+# testcontainers (auth e2e) transitive deps. Their native build scripts are only for
+# SSH-based Docker hosts and crypto acceleration; we use the local Docker socket, where
+# the pure-JS fallbacks are sufficient. Declined so installs stay clean.
+allowBuilds:
+  cpu-features: false
+  protobufjs: false
+  ssh2: false
