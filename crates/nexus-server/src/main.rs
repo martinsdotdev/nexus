@@ -11,6 +11,7 @@ mod http;
 mod persistence;
 mod protocol;
 mod runtime;
+mod workspaces;
 mod ws;
 
 use std::net::{IpAddr, SocketAddr};
