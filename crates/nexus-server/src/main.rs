@@ -12,9 +12,10 @@ mod protocol;
 mod runtime;
 mod ws;
 
-use std::net::SocketAddr;
+use std::net::{IpAddr, SocketAddr};
 use std::path::PathBuf;
 
+use anyhow::Context;
 use clap::Parser;
 
 use crate::cli::{Cli, Command};
@@ -35,7 +36,7 @@ async fn main() -> anyhow::Result<()> {
             let runtime = WorkspaceRuntime::new(FilePersistence::new(&data_dir))?;
             let app = http::build_app(runtime, args.static_dir);
 
-            let addr = SocketAddr::from(([127, 0, 0, 1], args.port));
+            let addr = socket_addr(&args.host, args.port)?;
             let listener = tokio::net::TcpListener::bind(addr).await?;
             tracing::info!(%addr, "nexus relay listening");
             axum::serve(listener, app).await?;
@@ -49,4 +50,36 @@ fn default_data_dir() -> PathBuf {
     dirs::data_dir()
         .unwrap_or_else(|| PathBuf::from("."))
         .join("nexus")
+}
+
+/// Resolve the bind address from the host string and port. The host comes from
+/// `--host` / `NEXUS_HOST` and must be an IP literal (e.g. `127.0.0.1` locally,
+/// `0.0.0.0` when hosted); a bad value surfaces as a clean error, not a panic.
+fn socket_addr(host: &str, port: u16) -> anyhow::Result<SocketAddr> {
+    let ip: IpAddr = host
+        .parse()
+        .with_context(|| format!("invalid --host / NEXUS_HOST value: {host:?}"))?;
+    Ok(SocketAddr::new(ip, port))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn resolves_loopback_and_all_interfaces() {
+        assert_eq!(
+            socket_addr("127.0.0.1", 7777).unwrap(),
+            "127.0.0.1:7777".parse().unwrap()
+        );
+        assert_eq!(
+            socket_addr("0.0.0.0", 8080).unwrap(),
+            "0.0.0.0:8080".parse().unwrap()
+        );
+    }
+
+    #[test]
+    fn rejects_a_non_ip_host() {
+        assert!(socket_addr("not-an-ip", 7777).is_err());
+    }
 }

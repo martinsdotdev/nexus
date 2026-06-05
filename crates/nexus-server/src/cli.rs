@@ -21,7 +21,13 @@ pub enum Command {
 
 #[derive(Debug, Args)]
 pub struct ServeArgs {
-    /// Port to bind on `127.0.0.1`.
+    /// Host/IP to bind. Defaults to loopback for local-first use; set
+    /// `0.0.0.0` (e.g. `NEXUS_HOST=0.0.0.0`) to accept external connections
+    /// when hosted.
+    #[arg(long, env = "NEXUS_HOST", default_value = "127.0.0.1")]
+    pub host: String,
+
+    /// Port to bind. Defaults to 7777.
     #[arg(long, env = "NEXUS_PORT", default_value_t = 7777)]
     pub port: u16,
 
