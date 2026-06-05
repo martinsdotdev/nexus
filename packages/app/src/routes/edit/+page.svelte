@@ -76,6 +76,14 @@
 	);
 	const themes = $derived(workspace?.workspace.themes ?? []);
 
+	// Broadcast this editor's selection to collaborators whenever it changes (covers
+	// canvas clicks, keyboard nudges, and clear-on-delete alike). A no-op until presence
+	// is enabled (cloud mode with a signed-in account).
+	$effect(() => {
+		const id = shell.selectedWidgetId;
+		workspace?.setSelection(id ? [id] : []);
+	});
+
 	// The command palette's commands; runCommand dispatches by id.
 	const commands: CommandItem[] = [
 		{ id: 'add-widget', label: m['editor.command.add_widget']() },

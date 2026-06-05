@@ -14,6 +14,7 @@
 	import { resizeRect, type ResizeHandle } from '../model/resize';
 	import SelectionOverlay from './SelectionOverlay.svelte';
 	import RemoteCursors from '$lib/features/presence/ui/RemoteCursors.svelte';
+	import RemoteSelections from '$lib/features/presence/ui/RemoteSelections.svelte';
 	import type { PeerPresence } from '$lib/shared/crdt/presence';
 
 	interface Props {
@@ -216,6 +217,7 @@
 				{/each}
 			</div>
 
+			<RemoteSelections peers={remotePeers} {widgets} />
 			<SelectionOverlay rect={selectedRect} onStartResize={startResize} />
 			<RemoteCursors peers={remotePeers} {scale} />
 		</div>
