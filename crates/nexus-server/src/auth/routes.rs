@@ -73,13 +73,27 @@ async fn csrf_guard(req: Request, next: Next) -> Result<Response, StatusCode> {
 #[derive(Serialize)]
 struct Me {
     user_id: String,
+    /// A human handle for presence and the collaborator roster (the email local-part
+    /// until OAuth supplies a real display name).
+    display: String,
 }
 
-/// `GET /auth/me`: the current user, or 401 if not logged in.
-async fn me(CurrentUser(user): CurrentUser) -> Json<Me> {
-    Json(Me {
+/// `GET /auth/me`: the current user (id + display handle), or 401 if not logged in.
+async fn me(
+    State(state): State<AppState>,
+    CurrentUser(user): CurrentUser,
+) -> Result<Json<Me>, StatusCode> {
+    let cloud = state.cloud.as_ref().ok_or(StatusCode::UNAUTHORIZED)?;
+    let display = cloud
+        .emails
+        .display_handle(user.id)
+        .await
+        .map_err(internal)?
+        .unwrap_or_else(|| "Anonymous".to_string());
+    Ok(Json(Me {
         user_id: user.id.to_string(),
-    })
+        display,
+    }))
 }
 
 /// `POST /auth/logout`: invalidate the session server-side and clear the cookie.
@@ -132,13 +146,14 @@ async fn post_email(
 
 /// `POST /auth/email/verify`: check the submitted code against the challenge named by the
 /// verification cookie. On success, mint a session, set the session cookie, clear the
-/// challenge cookie, and return the user. Maps the other outcomes to distinct statuses:
-/// rate-limited -> 429, expired or wrong -> 401, no challenge cookie -> 400.
+/// challenge cookie, and respond 204 (the client reads identity from `/auth/me`). Maps
+/// the other outcomes to distinct statuses: rate-limited -> 429, expired or wrong -> 401,
+/// no challenge cookie -> 400.
 async fn post_email_verify(
     State(state): State<AppState>,
     jar: CookieJar,
     Json(body): Json<VerifyRequest>,
-) -> Result<(CookieJar, Json<Me>), StatusCode> {
+) -> Result<(CookieJar, StatusCode), StatusCode> {
     let cloud = state.cloud.as_ref().ok_or(StatusCode::NOT_FOUND)?;
     let challenge = jar.get(EMAIL_COOKIE).ok_or(StatusCode::BAD_REQUEST)?;
 
@@ -153,12 +168,8 @@ async fn post_email_verify(
             let jar = jar
                 .add(session_cookie(session.token))
                 .remove(clear_cookie(EMAIL_COOKIE));
-            Ok((
-                jar,
-                Json(Me {
-                    user_id: user_id.to_string(),
-                }),
-            ))
+            // The session cookie is the result; the client reads identity from /auth/me.
+            Ok((jar, StatusCode::NO_CONTENT))
         }
         VerifyOutcome::RateLimited => Err(StatusCode::TOO_MANY_REQUESTS),
         VerifyOutcome::Expired | VerifyOutcome::Invalid => Err(StatusCode::UNAUTHORIZED),
@@ -418,7 +429,7 @@ mod tests {
             ))
             .await
             .unwrap();
-        assert_eq!(resp.status(), StatusCode::OK);
+        assert_eq!(resp.status(), StatusCode::NO_CONTENT);
         let session = set_cookie(&resp, COOKIE_NAME).expect("session cookie is set");
         assert!(!session.is_empty());
 

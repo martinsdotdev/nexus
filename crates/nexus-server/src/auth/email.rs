@@ -142,6 +142,17 @@ impl EmailStore {
         Ok(VerifyOutcome::Verified(user_id))
     }
 
+    /// A human display handle for the user: the local-part of their first verified email
+    /// (until OAuth supplies a real display name). Used for presence and the roster.
+    pub async fn display_handle(&self, user_id: Uuid) -> sqlx::Result<Option<String>> {
+        let row: Option<(String,)> =
+            sqlx::query_as("select email from email_identity where user_id = $1 limit 1")
+                .bind(user_id)
+                .fetch_optional(&self.pool)
+                .await?;
+        Ok(row.map(|(email,)| email.split('@').next().unwrap_or(&email).to_string()))
+    }
+
     /// Find the account for `email`, or create one (auto-provision). Done in a transaction
     /// so the `app_user` and its `email_identity` appear together or not at all.
     async fn upsert_identity(&self, email: &str) -> sqlx::Result<Uuid> {
