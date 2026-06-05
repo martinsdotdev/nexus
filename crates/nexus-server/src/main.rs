@@ -36,19 +36,24 @@ async fn main() -> anyhow::Result<()> {
             let runtime = WorkspaceRuntime::new(FilePersistence::new(&data_dir))?;
 
             // Cloud mode (NEXUS_DATABASE_URL set): connect Postgres, apply migrations,
-            // and back auth with a session store (ADR-0009/0010). Local file mode leaves
-            // `sessions` unset, so no database is touched and no auth routes are mounted.
-            let sessions = match &args.database_url {
+            // and back auth with the session + email-code stores and the email sender
+            // (ADR-0009/0010). Local file mode leaves `cloud` unset, so no database is
+            // touched and no auth routes are mounted.
+            let cloud = match &args.database_url {
                 Some(url) => {
                     let pool = sqlx::PgPool::connect(url).await?;
                     sqlx::migrate!("./migrations").run(&pool).await?;
                     tracing::info!("cloud mode: Postgres connected, migrations applied");
-                    Some(auth::session::SessionStore::new(pool))
+                    Some(http::CloudAuth {
+                        sessions: auth::session::SessionStore::new(pool.clone()),
+                        emails: auth::email::EmailStore::new(pool),
+                        sender: auth::email_sender::EmailSender::Log,
+                    })
                 }
                 None => None,
             };
 
-            let app = http::build_app(http::AppState { runtime, sessions }, args.static_dir);
+            let app = http::build_app(http::AppState { runtime, cloud }, args.static_dir);
 
             let addr = socket_addr(&args.host, args.port)?;
             let listener = tokio::net::TcpListener::bind(addr).await?;

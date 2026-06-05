@@ -30,12 +30,16 @@ sha2 = "0.10"
 getrandom = "0.2"
 base64 = "0.22"
 subtle = "2"
+# Email-code method (ADR-0010): a deliberately slow hash for the low-entropy 8-char code.
+argon2 = "0.5"
 # Cloud mode (ADR-0009/0010). Postgres-backed sessions + auth; the cookie jar. Present
 # only in cloud mode (NEXUS_DATABASE_URL set); local file mode does not build a pool.
 sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio", "tls-rustls", "postgres", "macros", "migrate", "uuid", "chrono"] }
 axum-extra = { version = "0.10", features = ["cookie"] }
 uuid = { version = "1", features = ["v4"] }
 chrono = "0.4"
+# `time::Duration` for cookie max-age (the type the cookie crate's builder expects).
+time = { version = "0.3", default-features = false }
 # Test-only: an ephemeral Postgres per integration-test run (needs Docker at test time),
 # and `tower::ServiceExt::oneshot` to drive the router in route tests.
 testcontainers-modules = { version = "0.12", features = ["postgres"] }
