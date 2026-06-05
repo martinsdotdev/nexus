@@ -84,6 +84,12 @@ impl WorkspaceRuntime {
         self.broadcast.subscribe()
     }
 
+    /// Number of connected sessions (live delta subscribers). The registry evicts a
+    /// workspace once this reaches zero.
+    pub fn subscriber_count(&self) -> usize {
+        self.broadcast.receiver_count()
+    }
+
     /// Subscribe to the presence relay. Each item is `(origin connection id,
     /// opaque presence bytes)`; a session forwards every item whose origin is not
     /// its own, so a peer never receives its own presence back.

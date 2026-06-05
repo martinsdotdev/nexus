@@ -11,6 +11,7 @@
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
+use sqlx::PgPool;
 use uuid::Uuid;
 
 /// Identifies a workspace's document. Local file mode uses the single `LOCAL`
@@ -70,6 +71,42 @@ impl WorkspacePersistence for FilePersistence {
     }
 }
 
+/// Postgres-backed persistence (cloud mode): each workspace's snapshot lives in its
+/// `workspace` row's `snapshot` column, created (null) at workspace creation and
+/// updated on every merge (ADR-0009).
+pub struct DatabasePersistence {
+    pool: PgPool,
+}
+
+impl DatabasePersistence {
+    pub fn new(pool: PgPool) -> Self {
+        Self { pool }
+    }
+}
+
+#[async_trait::async_trait]
+impl WorkspacePersistence for DatabasePersistence {
+    async fn load(&self, id: WorkspaceId) -> anyhow::Result<Option<Vec<u8>>> {
+        let row: Option<(Option<Vec<u8>>,)> =
+            sqlx::query_as("select snapshot from workspace where id = $1")
+                .bind(id.0)
+                .fetch_optional(&self.pool)
+                .await?;
+        // No row, or a row whose snapshot is still null: both mean "not persisted yet".
+        Ok(row.and_then(|(snapshot,)| snapshot))
+    }
+
+    async fn save(&self, id: WorkspaceId, snapshot: &[u8]) -> anyhow::Result<()> {
+        // The row exists from workspace creation; this fills/updates its snapshot.
+        sqlx::query("update workspace set snapshot = $1 where id = $2")
+            .bind(snapshot)
+            .bind(id.0)
+            .execute(&self.pool)
+            .await?;
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -108,5 +145,35 @@ mod tests {
         store.save(WorkspaceId::LOCAL, &[1]).await.unwrap();
         let other = WorkspaceId(Uuid::from_u128(42));
         assert_eq!(store.load(other).await.unwrap(), Some(vec![1]));
+    }
+
+    #[tokio::test]
+    async fn database_persistence_round_trips_a_snapshot_per_workspace() {
+        use testcontainers_modules::postgres::Postgres;
+        use testcontainers_modules::testcontainers::runners::AsyncRunner;
+
+        let container = Postgres::default().start().await.unwrap();
+        let port = container.get_host_port_ipv4(5432).await.unwrap();
+        let url = format!("postgres://postgres:postgres@127.0.0.1:{port}/postgres");
+        let pool = PgPool::connect(&url).await.unwrap();
+        sqlx::migrate!("./migrations").run(&pool).await.unwrap();
+
+        let id = WorkspaceId(Uuid::new_v4());
+        sqlx::query("insert into workspace (id) values ($1)")
+            .bind(id.0)
+            .execute(&pool)
+            .await
+            .unwrap();
+
+        let store = DatabasePersistence::new(pool.clone());
+        assert_eq!(
+            store.load(id).await.unwrap(),
+            None,
+            "null snapshot until first save"
+        );
+        store.save(id, &[1, 2, 3]).await.unwrap();
+        assert_eq!(store.load(id).await.unwrap(), Some(vec![1, 2, 3]));
+        store.save(id, &[9]).await.unwrap();
+        assert_eq!(store.load(id).await.unwrap(), Some(vec![9]), "overwrite");
     }
 }

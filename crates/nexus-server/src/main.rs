@@ -10,6 +10,7 @@ mod cli;
 mod http;
 mod persistence;
 mod protocol;
+mod registry;
 mod runtime;
 mod workspaces;
 mod ws;
@@ -22,8 +23,8 @@ use anyhow::Context;
 use clap::Parser;
 
 use crate::cli::{Cli, Command};
-use crate::persistence::{FilePersistence, WorkspaceId};
-use crate::runtime::WorkspaceRuntime;
+use crate::persistence::{DatabasePersistence, FilePersistence, WorkspacePersistence};
+use crate::registry::WorkspaceRegistry;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -35,34 +36,32 @@ async fn main() -> anyhow::Result<()> {
         Command::Serve(args) => {
             let data_dir = args.data_dir.unwrap_or_else(default_data_dir);
             std::fs::create_dir_all(&data_dir)?;
-            let runtime = WorkspaceRuntime::load(
-                WorkspaceId::LOCAL,
-                Arc::new(FilePersistence::new(&data_dir)),
-            )
-            .await?;
 
             // Cloud mode (NEXUS_DATABASE_URL set): connect Postgres, apply migrations,
-            // and back auth with the session + email-code stores and the email sender
-            // (ADR-0009/0010). Local file mode leaves `cloud` unset, so no database is
-            // touched and no auth routes are mounted.
-            let cloud = match &args.database_url {
-                Some(url) => {
-                    let pool = sqlx::PgPool::connect(url).await?;
-                    sqlx::migrate!("./migrations").run(&pool).await?;
-                    tracing::info!("cloud mode: Postgres connected, migrations applied");
-                    Some(http::CloudAuth {
-                        sessions: auth::session::SessionStore::new(pool.clone()),
-                        emails: auth::email::EmailStore::new(pool),
-                        sender: match &args.email_sink {
-                            Some(path) => auth::email_sender::EmailSender::File(path.clone()),
-                            None => auth::email_sender::EmailSender::Log,
-                        },
-                    })
-                }
-                None => None,
-            };
+            // back auth with the session + email-code stores, and persist workspaces to
+            // the database. Local file mode leaves `cloud` unset, persists to a single
+            // file, and mounts no auth routes (ADR-0005/0009/0010).
+            let (cloud, persistence): (Option<http::CloudAuth>, Arc<dyn WorkspacePersistence>) =
+                match &args.database_url {
+                    Some(url) => {
+                        let pool = sqlx::PgPool::connect(url).await?;
+                        sqlx::migrate!("./migrations").run(&pool).await?;
+                        tracing::info!("cloud mode: Postgres connected, migrations applied");
+                        let cloud = http::CloudAuth {
+                            sessions: auth::session::SessionStore::new(pool.clone()),
+                            emails: auth::email::EmailStore::new(pool.clone()),
+                            sender: match &args.email_sink {
+                                Some(path) => auth::email_sender::EmailSender::File(path.clone()),
+                                None => auth::email_sender::EmailSender::Log,
+                            },
+                        };
+                        (Some(cloud), Arc::new(DatabasePersistence::new(pool)))
+                    }
+                    None => (None, Arc::new(FilePersistence::new(&data_dir))),
+                };
 
-            let app = http::build_app(http::AppState { runtime, cloud }, args.static_dir);
+            let registry = WorkspaceRegistry::new(persistence);
+            let app = http::build_app(http::AppState { registry, cloud }, args.static_dir);
 
             let addr = socket_addr(&args.host, args.port)?;
             let listener = tokio::net::TcpListener::bind(addr).await?;

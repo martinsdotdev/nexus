@@ -11,7 +11,7 @@ use tower_http::services::{ServeDir, ServeFile};
 use crate::auth::email::EmailStore;
 use crate::auth::email_sender::EmailSender;
 use crate::auth::session::SessionStore;
-use crate::runtime::WorkspaceRuntime;
+use crate::registry::WorkspaceRegistry;
 use crate::ws::sync_handler;
 
 /// The cloud-mode authentication subsystem, present together or not at all (one "cloud
@@ -24,12 +24,12 @@ pub struct CloudAuth {
     pub sender: EmailSender,
 }
 
-/// Shared application state. `runtime` is always present (the canonical Loro replica);
-/// `cloud` is `Some` only in cloud mode, where it backs authentication. Cheap to clone
-/// (every field is reference-counted).
+/// Shared application state. `registry` is always present (the relay's live workspace
+/// documents, loaded on demand); `cloud` is `Some` only in cloud mode, where it backs
+/// authentication. Cheap to clone (every field is reference-counted).
 #[derive(Clone)]
 pub struct AppState {
-    pub runtime: Arc<WorkspaceRuntime>,
+    pub registry: Arc<WorkspaceRegistry>,
     pub cloud: Option<CloudAuth>,
 }
 
