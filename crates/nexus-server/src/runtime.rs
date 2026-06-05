@@ -19,11 +19,19 @@ use crate::persistence::FilePersistence;
 /// Capacity of the rebroadcast channel; deltas are small and consumed promptly.
 const BROADCAST_CAPACITY: usize = 256;
 
+/// Capacity of the presence relay channel. Presence is high-frequency (cursors)
+/// but last-write-wins, so a slow consumer that lags simply skips stale frames.
+const PRESENCE_CAPACITY: usize = 256;
+
 /// The relay's canonical replica. Shared across sessions via `Arc`.
 pub struct WorkspaceRuntime {
     doc: LoroDoc,
     apply_lock: Mutex<()>,
     broadcast: broadcast::Sender<Vec<u8>>,
+    // Opaque presence frames keyed by their originating connection id. The relay
+    // never imports, validates, or persists these (Loro's `EphemeralStore` is
+    // JS-only); it only fans them out so each session can skip its own echo.
+    presence: broadcast::Sender<(u64, Vec<u8>)>,
     persistence: FilePersistence,
 }
 
@@ -51,10 +59,12 @@ impl WorkspaceRuntime {
             persistence.save(&doc.export(loro::ExportMode::Snapshot)?)?;
         }
         let (broadcast, _) = broadcast::channel(BROADCAST_CAPACITY);
+        let (presence, _) = broadcast::channel(PRESENCE_CAPACITY);
         Ok(Arc::new(Self {
             doc,
             apply_lock: Mutex::new(()),
             broadcast,
+            presence,
             persistence,
         }))
     }
@@ -62,6 +72,20 @@ impl WorkspaceRuntime {
     /// Subscribe to the stream of update deltas the relay rebroadcasts.
     pub fn subscribe(&self) -> broadcast::Receiver<Vec<u8>> {
         self.broadcast.subscribe()
+    }
+
+    /// Subscribe to the presence relay. Each item is `(origin connection id,
+    /// opaque presence bytes)`; a session forwards every item whose origin is not
+    /// its own, so a peer never receives its own presence back.
+    pub fn subscribe_presence(&self) -> broadcast::Receiver<(u64, Vec<u8>)> {
+        self.presence.subscribe()
+    }
+
+    /// Forward an opaque presence frame from connection `from` to every other
+    /// connection. Pure fan-out: the document is never touched and nothing is
+    /// persisted (the relay holds no `EphemeralStore`).
+    pub fn forward_presence(&self, from: u64, bytes: Vec<u8>) {
+        let _ = self.presence.send((from, bytes));
     }
 
     /// A full snapshot of the canonical document (sent to a newly-connected peer).
@@ -243,6 +267,33 @@ mod tests {
             restarted.workspace().layouts[0].active_scene_id,
             target,
             "state restored from the persisted snapshot"
+        );
+    }
+
+    #[tokio::test]
+    async fn forward_presence_reaches_subscribers_with_its_origin() {
+        let dir = tempfile::tempdir().unwrap();
+        let runtime = WorkspaceRuntime::new(FilePersistence::new(dir.path())).unwrap();
+        let mut rx = runtime.subscribe_presence();
+
+        runtime.forward_presence(7, vec![1, 2, 3]);
+
+        // The origin id rides along so each session can skip its own echo.
+        assert_eq!(rx.try_recv().unwrap(), (7, vec![1, 2, 3]));
+    }
+
+    #[tokio::test]
+    async fn presence_never_touches_the_document() {
+        let dir = tempfile::tempdir().unwrap();
+        let runtime = WorkspaceRuntime::new(FilePersistence::new(dir.path())).unwrap();
+        let before = runtime.snapshot();
+
+        runtime.forward_presence(1, vec![9, 9, 9]);
+
+        assert_eq!(
+            runtime.snapshot(),
+            before,
+            "forwarding presence must not mutate (or persist) the document"
         );
     }
 }
