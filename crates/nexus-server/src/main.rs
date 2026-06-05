@@ -15,12 +15,13 @@ mod ws;
 
 use std::net::{IpAddr, SocketAddr};
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use anyhow::Context;
 use clap::Parser;
 
 use crate::cli::{Cli, Command};
-use crate::persistence::FilePersistence;
+use crate::persistence::{FilePersistence, WorkspaceId};
 use crate::runtime::WorkspaceRuntime;
 
 #[tokio::main]
@@ -33,7 +34,11 @@ async fn main() -> anyhow::Result<()> {
         Command::Serve(args) => {
             let data_dir = args.data_dir.unwrap_or_else(default_data_dir);
             std::fs::create_dir_all(&data_dir)?;
-            let runtime = WorkspaceRuntime::new(FilePersistence::new(&data_dir))?;
+            let runtime = WorkspaceRuntime::load(
+                WorkspaceId::LOCAL,
+                Arc::new(FilePersistence::new(&data_dir)),
+            )
+            .await?;
 
             // Cloud mode (NEXUS_DATABASE_URL set): connect Postgres, apply migrations,
             // and back auth with the session + email-code stores and the email sender

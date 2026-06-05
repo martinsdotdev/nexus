@@ -235,7 +235,7 @@ pub fn router() -> Router<AppState> {
 mod tests {
     use super::*;
     use crate::http::build_app;
-    use crate::persistence::FilePersistence;
+    use crate::persistence::{FilePersistence, WorkspaceId};
     use crate::runtime::WorkspaceRuntime;
 
     use super::super::email::EmailStore;
@@ -272,7 +272,12 @@ mod tests {
         sqlx::migrate!("./migrations").run(&pool).await.unwrap();
 
         let tmp = tempfile::tempdir().unwrap();
-        let runtime = WorkspaceRuntime::new(FilePersistence::new(tmp.path())).unwrap();
+        let runtime = WorkspaceRuntime::load(
+            WorkspaceId::LOCAL,
+            Arc::new(FilePersistence::new(tmp.path())),
+        )
+        .await
+        .unwrap();
         let mailbox: Mailbox = Arc::new(Mutex::new(Vec::new()));
         let state = AppState {
             runtime,

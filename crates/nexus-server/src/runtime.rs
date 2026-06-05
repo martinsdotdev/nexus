@@ -14,7 +14,7 @@ use loro::LoroDoc;
 use nexus_core::{default_doc, model, validate};
 use tokio::sync::{Mutex, broadcast};
 
-use crate::persistence::FilePersistence;
+use crate::persistence::{WorkspaceId, WorkspacePersistence};
 
 /// Capacity of the rebroadcast channel; deltas are small and consumed promptly.
 const BROADCAST_CAPACITY: usize = 256;
@@ -23,8 +23,10 @@ const BROADCAST_CAPACITY: usize = 256;
 /// but last-write-wins, so a slow consumer that lags simply skips stale frames.
 const PRESENCE_CAPACITY: usize = 256;
 
-/// The relay's canonical replica. Shared across sessions via `Arc`.
+/// The relay's canonical replica for one workspace. Shared across sessions via
+/// `Arc`; in cloud mode the registry holds one per live workspace.
 pub struct WorkspaceRuntime {
+    id: WorkspaceId,
     doc: LoroDoc,
     apply_lock: Mutex<()>,
     broadcast: broadcast::Sender<Vec<u8>>,
@@ -32,23 +34,28 @@ pub struct WorkspaceRuntime {
     // never imports, validates, or persists these (Loro's `EphemeralStore` is
     // JS-only); it only fans them out so each session can skip its own echo.
     presence: broadcast::Sender<(u64, Vec<u8>)>,
-    persistence: FilePersistence,
+    persistence: Arc<dyn WorkspacePersistence>,
 }
 
 impl WorkspaceRuntime {
-    /// Load the persisted snapshot, or build and persist the curated default on
-    /// first run. The curated default is built ONLY here (never on a client) so
-    /// node `TreeID`s are minted once (ADR-0005 / plan T1).
-    pub fn new(persistence: FilePersistence) -> anyhow::Result<Arc<Self>> {
+    /// Load workspace `id`'s persisted snapshot, or build and persist the curated
+    /// default on first run. The curated default is built ONLY here (never on a
+    /// client) so node `TreeID`s are minted once (ADR-0005 / plan T1).
+    pub async fn load(
+        id: WorkspaceId,
+        persistence: Arc<dyn WorkspacePersistence>,
+    ) -> anyhow::Result<Arc<Self>> {
         let doc = LoroDoc::new();
         doc.set_peer_id(1)?;
-        match persistence.load()? {
+        match persistence.load(id).await? {
             Some(snapshot) => {
                 let _ = doc.import(&snapshot)?;
             }
             None => {
                 default_doc::build_default(&doc)?;
-                persistence.save(&doc.export(loro::ExportMode::Snapshot)?)?;
+                persistence
+                    .save(id, &doc.export(loro::ExportMode::Snapshot)?)
+                    .await?;
             }
         }
         // Migrate snapshots that predate the seeded built-in themes (ADR-0007):
@@ -56,11 +63,14 @@ impl WorkspaceRuntime {
         // and a no-op for a freshly built default, which already seeded them.
         if default_doc::ensure_builtin_themes(&doc)? {
             doc.commit();
-            persistence.save(&doc.export(loro::ExportMode::Snapshot)?)?;
+            persistence
+                .save(id, &doc.export(loro::ExportMode::Snapshot)?)
+                .await?;
         }
         let (broadcast, _) = broadcast::channel(BROADCAST_CAPACITY);
         let (presence, _) = broadcast::channel(PRESENCE_CAPACITY);
         Ok(Arc::new(Self {
+            id,
             doc,
             apply_lock: Mutex::new(()),
             broadcast,
@@ -114,7 +124,7 @@ impl WorkspaceRuntime {
         let repairs = validate::validate(&model::read_workspace(&self.doc));
         validate::apply_repairs(&self.doc, &repairs)?;
 
-        self.persistence.save(&self.snapshot())?;
+        self.persistence.save(self.id, &self.snapshot()).await?;
 
         // Everything new since `before` = the peer's ops plus any repair ops.
         let delta = self.doc.export(loro::ExportMode::updates(&before))?;
@@ -126,6 +136,14 @@ impl WorkspaceRuntime {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::persistence::FilePersistence;
+
+    /// A local-mode runtime backed by a fresh file persistence under `dir`.
+    async fn local_runtime(dir: &std::path::Path) -> Arc<WorkspaceRuntime> {
+        WorkspaceRuntime::load(WorkspaceId::LOCAL, Arc::new(FilePersistence::new(dir)))
+            .await
+            .unwrap()
+    }
 
     /// Seed a peer from the canonical snapshot, activate the scene at `index`,
     /// and feed the resulting update through the relay. Returns the target id.
@@ -153,7 +171,7 @@ mod tests {
     #[tokio::test]
     async fn apply_remote_merges_activation_and_broadcasts() {
         let dir = tempfile::tempdir().unwrap();
-        let runtime = WorkspaceRuntime::new(FilePersistence::new(dir.path())).unwrap();
+        let runtime = local_runtime(dir.path()).await;
         let mut rx = runtime.subscribe();
 
         let target = peer_activates(&runtime, 1).await;
@@ -166,7 +184,7 @@ mod tests {
     #[tokio::test]
     async fn repairs_invalid_peer_activation() {
         let dir = tempfile::tempdir().unwrap();
-        let runtime = WorkspaceRuntime::new(FilePersistence::new(dir.path())).unwrap();
+        let runtime = local_runtime(dir.path()).await;
 
         // A peer activates a scene id the layout does not own.
         let peer = LoroDoc::new();
@@ -194,7 +212,7 @@ mod tests {
     #[tokio::test]
     async fn repairs_dangling_peer_theme() {
         let dir = tempfile::tempdir().unwrap();
-        let runtime = WorkspaceRuntime::new(FilePersistence::new(dir.path())).unwrap();
+        let runtime = local_runtime(dir.path()).await;
 
         // A peer points the live scene at a theme that does not exist.
         let peer = LoroDoc::new();
@@ -234,11 +252,15 @@ mod tests {
         }
         legacy.commit();
         FilePersistence::new(dir.path())
-            .save(&legacy.export(loro::ExportMode::Snapshot).unwrap())
+            .save(
+                WorkspaceId::LOCAL,
+                &legacy.export(loro::ExportMode::Snapshot).unwrap(),
+            )
+            .await
             .unwrap();
 
         // The relay loads the legacy snapshot and migrates the built-ins back in.
-        let runtime = WorkspaceRuntime::new(FilePersistence::new(dir.path())).unwrap();
+        let runtime = local_runtime(dir.path()).await;
         let ids: Vec<String> = runtime
             .workspace()
             .themes
@@ -250,7 +272,7 @@ mod tests {
         }
 
         // The migration persisted, so a restart needs no further re-seeding.
-        let restarted = WorkspaceRuntime::new(FilePersistence::new(dir.path())).unwrap();
+        let restarted = local_runtime(dir.path()).await;
         assert_eq!(restarted.workspace().themes.len(), 4, "migration persisted");
     }
 
@@ -258,11 +280,11 @@ mod tests {
     async fn reloads_persisted_state_on_restart() {
         let dir = tempfile::tempdir().unwrap();
         let target = {
-            let runtime = WorkspaceRuntime::new(FilePersistence::new(dir.path())).unwrap();
+            let runtime = local_runtime(dir.path()).await;
             peer_activates(&runtime, 1).await
         };
 
-        let restarted = WorkspaceRuntime::new(FilePersistence::new(dir.path())).unwrap();
+        let restarted = local_runtime(dir.path()).await;
         assert_eq!(
             restarted.workspace().layouts[0].active_scene_id,
             target,
@@ -273,7 +295,7 @@ mod tests {
     #[tokio::test]
     async fn forward_presence_reaches_subscribers_with_its_origin() {
         let dir = tempfile::tempdir().unwrap();
-        let runtime = WorkspaceRuntime::new(FilePersistence::new(dir.path())).unwrap();
+        let runtime = local_runtime(dir.path()).await;
         let mut rx = runtime.subscribe_presence();
 
         runtime.forward_presence(7, vec![1, 2, 3]);
@@ -285,7 +307,7 @@ mod tests {
     #[tokio::test]
     async fn presence_never_touches_the_document() {
         let dir = tempfile::tempdir().unwrap();
-        let runtime = WorkspaceRuntime::new(FilePersistence::new(dir.path())).unwrap();
+        let runtime = local_runtime(dir.path()).await;
         let before = runtime.snapshot();
 
         runtime.forward_presence(1, vec![9, 9, 9]);
