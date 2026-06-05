@@ -47,7 +47,10 @@ async fn main() -> anyhow::Result<()> {
                     Some(http::CloudAuth {
                         sessions: auth::session::SessionStore::new(pool.clone()),
                         emails: auth::email::EmailStore::new(pool),
-                        sender: auth::email_sender::EmailSender::Log,
+                        sender: match &args.email_sink {
+                            Some(path) => auth::email_sender::EmailSender::File(path.clone()),
+                            None => auth::email_sender::EmailSender::Log,
+                        },
                     })
                 }
                 None => None,

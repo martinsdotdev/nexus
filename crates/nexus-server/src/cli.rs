@@ -44,4 +44,10 @@ pub struct ServeArgs {
     /// runs in local single-tenant file mode (the default, ADR-0005).
     #[arg(long, env = "NEXUS_DATABASE_URL")]
     pub database_url: Option<String>,
+
+    /// Write each issued email code to this file (`<recipient>\t<code>` per line)
+    /// instead of logging it. A simple local sink (cloud mode); the auth e2e points it
+    /// at a temp file to read the code without a mailbox.
+    #[arg(long, env = "NEXUS_EMAIL_SINK")]
+    pub email_sink: Option<PathBuf>,
 }
