@@ -88,6 +88,8 @@ The spec at [`docs/superpowers/specs/`](../superpowers/specs/) is the *current* 
 | [0006](0006-data-driven-custom-themes.md) | Data-driven custom themes with a hybrid registry and token linking | superseded by [0007](0007-pure-data-driven-themes.md) | 2026-05-29 |
 | [0007](0007-pure-data-driven-themes.md) | Pure data-driven themes (every theme is registry data; built-ins are seeded) | accepted | 2026-05-29 |
 | [0008](0008-adopt-ark-ui.md) | Adopt Ark UI (headless) for the editor component layer | accepted | 2026-05-26 |
+| [0009](0009-activate-v2-cloud-mode.md) | Activate v2 cloud mode (multi-tenant hosted relay on the local-first Loro core) | accepted | 2026-06-05 |
+| [0010](0010-passwordless-first-party-auth.md) | Passwordless first-party auth (passkeys + email code) alongside Twitch OAuth | accepted | 2026-06-05 |
 
 When adding an ADR, append a row to this table.
 
