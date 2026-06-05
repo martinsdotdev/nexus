@@ -31,20 +31,24 @@ async fn main() -> anyhow::Result<()> {
 
     match Cli::parse().command {
         Command::Serve(args) => {
-            if args.database_url.is_some() {
-                // Cloud mode (Postgres sessions + multi-tenant workspaces, ADR-0009/0010)
-                // is still being built; the pool, session store, and auth routes land in
-                // the following increments. Until then, run local file mode and say so.
-                tracing::warn!(
-                    "NEXUS_DATABASE_URL is set, but cloud mode is not yet wired; \
-                     running local file mode for now"
-                );
-            }
             let data_dir = args.data_dir.unwrap_or_else(default_data_dir);
             std::fs::create_dir_all(&data_dir)?;
-
             let runtime = WorkspaceRuntime::new(FilePersistence::new(&data_dir))?;
-            let app = http::build_app(runtime, args.static_dir);
+
+            // Cloud mode (NEXUS_DATABASE_URL set): connect Postgres, apply migrations,
+            // and back auth with a session store (ADR-0009/0010). Local file mode leaves
+            // `sessions` unset, so no database is touched and no auth routes are mounted.
+            let sessions = match &args.database_url {
+                Some(url) => {
+                    let pool = sqlx::PgPool::connect(url).await?;
+                    sqlx::migrate!("./migrations").run(&pool).await?;
+                    tracing::info!("cloud mode: Postgres connected, migrations applied");
+                    Some(auth::session::SessionStore::new(pool))
+                }
+                None => None,
+            };
+
+            let app = http::build_app(http::AppState { runtime, sessions }, args.static_dir);
 
             let addr = socket_addr(&args.host, args.port)?;
             let listener = tokio::net::TcpListener::bind(addr).await?;

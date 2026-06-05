@@ -36,5 +36,7 @@ sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio",
 axum-extra = { version = "0.10", features = ["cookie"] }
 uuid = { version = "1", features = ["v4"] }
 chrono = "0.4"
-# Test-only: an ephemeral Postgres per integration-test run (needs Docker at test time).
+# Test-only: an ephemeral Postgres per integration-test run (needs Docker at test time),
+# and `tower::ServiceExt::oneshot` to drive the router in route tests.
 testcontainers-modules = { version = "0.12", features = ["postgres"] }
+tower = { version = "0.5", features = ["util"] }

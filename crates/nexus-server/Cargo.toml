@@ -25,6 +25,8 @@ sqlx.workspace = true
 axum-extra.workspace = true
 uuid.workspace = true
 chrono.workspace = true
+serde.workspace = true
 
 [dev-dependencies]
 testcontainers-modules.workspace = true
+tower.workspace = true

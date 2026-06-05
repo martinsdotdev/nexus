@@ -7,8 +7,12 @@
 #[allow(dead_code)]
 pub mod session_token;
 
-// The Postgres session store, built on the token core and exercised by its own
-// (testcontainers) integration tests, but not yet wired into a route or the /sync
-// gate; that wiring (and the dead_code removal) lands in the next increments.
+// `SessionStore::create` (and the token `generate` it calls) has no production caller
+// until the first login method lands next, so the lower layers still read as partly
+// dead code; validate/invalidate are wired through the routes below.
 #[allow(dead_code)]
 pub mod session;
+
+// The cloud-mode auth HTTP layer (extractor, CSRF guard, /auth/me + /auth/logout),
+// mounted by `http::build_app` in cloud mode. Fully wired.
+pub mod routes;

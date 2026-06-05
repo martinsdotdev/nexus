@@ -10,14 +10,12 @@ use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
 use axum::response::Response;
 use futures_util::{SinkExt, StreamExt};
 
+use crate::http::AppState;
 use crate::protocol::Frame;
 use crate::runtime::WorkspaceRuntime;
 
-pub async fn sync_handler(
-    ws: WebSocketUpgrade,
-    State(runtime): State<Arc<WorkspaceRuntime>>,
-) -> Response {
-    ws.on_upgrade(move |socket| handle_socket(socket, runtime))
+pub async fn sync_handler(ws: WebSocketUpgrade, State(state): State<AppState>) -> Response {
+    ws.on_upgrade(move |socket| handle_socket(socket, state.runtime))
 }
 
 async fn handle_socket(socket: WebSocket, runtime: Arc<WorkspaceRuntime>) {
