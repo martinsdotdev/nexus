@@ -6,6 +6,7 @@
 	import ToolRail from './ToolRail.svelte';
 	import SceneStrip from './SceneStrip.svelte';
 	import { createWorkspaceClient, type WorkspaceClient } from '$lib/shared/crdt/client.svelte';
+	import type { PeerIdentity } from '$lib/shared/crdt/presence';
 	import EditorCanvas from '$lib/features/canvas-compose/ui/EditorCanvas.svelte';
 	import Inspector from '$lib/features/inspector/ui/Inspector.svelte';
 	import ThemeBuilder from '$lib/features/theme-builder/ui/ThemeBuilder.svelte';
@@ -28,12 +29,34 @@
 		brb: m['editor.scene.brb'],
 		ending: m['editor.scene.ending']
 	};
+	// The signed-in account, used to stamp presence (cursors/selections). In local mode
+	// /auth/me is not a route, so this resolves to no identity and presence stays off.
+	async function fetchIdentity(): Promise<PeerIdentity | undefined> {
+		try {
+			const res = await fetch('/auth/me', { credentials: 'include' });
+			if (!res.ok) return undefined;
+			const me = (await res.json()) as { user_id: string; display: string };
+			return { id: me.user_id, name: me.display };
+		} catch {
+			return undefined;
+		}
+	}
+
 	let workspace = $state<WorkspaceClient | null>(null);
 	$effect(() => {
 		const url = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/sync`;
-		const client = createWorkspaceClient(url);
-		workspace = client;
-		return () => client.dispose();
+		let client: WorkspaceClient | null = null;
+		let disposed = false;
+		void (async () => {
+			const identity = await fetchIdentity();
+			if (disposed) return;
+			client = createWorkspaceClient(url, { identity });
+			workspace = client;
+		})();
+		return () => {
+			disposed = true;
+			client?.dispose();
+		};
 	});
 	const sceneCards = $derived(
 		(workspace?.scenes ?? []).map((scene) => ({
@@ -244,6 +267,8 @@
 		selectedWidgetId={shell.selectedWidgetId}
 		onSelectWidget={(id) => shell.selectWidget(id)}
 		onCommitGeometry={(id, rect) => workspace?.setWidgetGeometry(id, rect)}
+		remotePeers={workspace?.remotePeers ?? []}
+		onCursorMove={(x, y) => workspace?.setCursor(x, y)}
 	/>
 
 	<div class="dock dock-right">

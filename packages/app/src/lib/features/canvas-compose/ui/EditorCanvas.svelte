@@ -13,14 +13,27 @@
 	import { snapRect, type Guide, type Rect } from '../model/snap';
 	import { resizeRect, type ResizeHandle } from '../model/resize';
 	import SelectionOverlay from './SelectionOverlay.svelte';
+	import RemoteCursors from '$lib/features/presence/ui/RemoteCursors.svelte';
+	import type { PeerPresence } from '$lib/shared/crdt/presence';
 
 	interface Props {
 		view: WorkspaceView | null;
 		selectedWidgetId: string | null;
 		onSelectWidget: (id: string | null) => void;
 		onCommitGeometry: (id: string, rect: Rect) => void;
+		/** Other collaborators present on this canvas (their cursors are drawn). */
+		remotePeers?: PeerPresence[];
+		/** Report this editor's pointer position in virtual coordinates (throttled). */
+		onCursorMove?: (x: number, y: number) => void;
 	}
-	let { view, selectedWidgetId, onSelectWidget, onCommitGeometry }: Props = $props();
+	let {
+		view,
+		selectedWidgetId,
+		onSelectWidget,
+		onCommitGeometry,
+		remotePeers = [],
+		onCursorMove
+	}: Props = $props();
 
 	const bus = createEventBus();
 
@@ -67,6 +80,19 @@
 			{ x: rect.left, y: rect.top },
 			scale
 		);
+	}
+
+	// Report our pointer position for presence, throttled to one update per frame so a
+	// fast move does not flood the relay (presence is last-write-wins, so dropping
+	// intermediate positions is harmless).
+	let cursorRaf = 0;
+	let pendingCursor: { x: number; y: number } | null = null;
+	function reportCursor(event: PointerEvent) {
+		pendingCursor = toVirtual(event);
+		cursorRaf ||= requestAnimationFrame(() => {
+			cursorRaf = 0;
+			if (pendingCursor) onCursorMove?.(pendingCursor.x, pendingCursor.y);
+		});
 	}
 
 	function startMove(event: PointerEvent, widget: WidgetView) {
@@ -145,10 +171,12 @@
 
 <div class="canvas-area" bind:clientWidth={areaW} bind:clientHeight={areaH}>
 	{#if scene && themeStyle}
+		<!-- svelte-ignore a11y_no_static_element_interactions -->
 		<div
 			class="canvas-stage"
 			bind:this={stageEl}
 			style="width: {VIRTUAL_W}px; height: {VIRTUAL_H}px; transform: scale({scale});"
+			onpointermove={reportCursor}
 		>
 			<!-- svelte-ignore a11y_no_static_element_interactions -->
 			<div
@@ -189,6 +217,7 @@
 			</div>
 
 			<SelectionOverlay rect={selectedRect} onStartResize={startResize} />
+			<RemoteCursors peers={remotePeers} {scale} />
 		</div>
 	{/if}
 </div>
