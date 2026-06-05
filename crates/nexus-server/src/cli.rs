@@ -38,4 +38,10 @@ pub struct ServeArgs {
     /// Directory of built UI assets to serve (the SvelteKit `build/` output).
     #[arg(long, env = "NEXUS_STATIC_DIR")]
     pub static_dir: Option<PathBuf>,
+
+    /// Postgres connection string. When set, the relay runs in cloud mode
+    /// (accounts, sessions, multi-tenant workspaces, ADR-0009/0010); when unset, it
+    /// runs in local single-tenant file mode (the default, ADR-0005).
+    #[arg(long, env = "NEXUS_DATABASE_URL")]
+    pub database_url: Option<String>,
 }

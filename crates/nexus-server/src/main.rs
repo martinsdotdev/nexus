@@ -31,6 +31,15 @@ async fn main() -> anyhow::Result<()> {
 
     match Cli::parse().command {
         Command::Serve(args) => {
+            if args.database_url.is_some() {
+                // Cloud mode (Postgres sessions + multi-tenant workspaces, ADR-0009/0010)
+                // is still being built; the pool, session store, and auth routes land in
+                // the following increments. Until then, run local file mode and say so.
+                tracing::warn!(
+                    "NEXUS_DATABASE_URL is set, but cloud mode is not yet wired; \
+                     running local file mode for now"
+                );
+            }
             let data_dir = args.data_dir.unwrap_or_else(default_data_dir);
             std::fs::create_dir_all(&data_dir)?;
 

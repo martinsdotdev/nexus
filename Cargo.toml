@@ -30,3 +30,7 @@ sha2 = "0.10"
 getrandom = "0.2"
 base64 = "0.22"
 subtle = "2"
+# Cloud mode (ADR-0009/0010). Postgres-backed sessions + auth; the cookie jar. Present
+# only in cloud mode (NEXUS_DATABASE_URL set); local file mode does not build a pool.
+sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio", "tls-rustls", "postgres", "macros", "migrate", "uuid", "chrono"] }
+axum-extra = { version = "0.10", features = ["cookie"] }
