@@ -43,6 +43,7 @@
 	}
 
 	let workspace = $state<WorkspaceClient | null>(null);
+	let selfIdentity = $state<PeerIdentity | undefined>(undefined);
 	$effect(() => {
 		// In cloud mode the workspace is chosen by the picker (/edit?workspace=<id>); local
 		// mode ignores it and serves its single workspace.
@@ -54,6 +55,7 @@
 		void (async () => {
 			const identity = await fetchIdentity();
 			if (disposed) return;
+			selfIdentity = identity;
 			client = createWorkspaceClient(url, { identity });
 			workspace = client;
 		})();
@@ -79,6 +81,18 @@
 		activeScene?.widgets.find((widget) => widget.id === shell.selectedWidgetId) ?? null
 	);
 	const themes = $derived(workspace?.workspace.themes ?? []);
+
+	// Everyone in this workspace for the titlebar avatar stack: you first (when signed in),
+	// then the live remote peers. Roles (the host crown) layer in once members are loaded.
+	const rosterPeople = $derived.by(() => {
+		const others = (workspace?.remotePeers ?? []).map((p) => ({
+			id: p.user.id,
+			name: p.user.name
+		}));
+		return selfIdentity
+			? [{ id: selfIdentity.id, name: selfIdentity.name, you: true }, ...others]
+			: others;
+	});
 
 	// Broadcast this editor's selection to collaborators whenever it changes (covers
 	// canvas clicks, keyboard nudges, and clear-on-delete alike). A no-op until presence
@@ -260,7 +274,7 @@
 		onUndo={() => workspace?.undo()}
 		onRedo={() => workspace?.redo()}
 		onOpenPalette={() => shell.togglePalette()}
-		remotePeers={workspace?.remotePeers ?? []}
+		people={rosterPeople}
 	/>
 	<ToolRail activeToolId={shell.activeToolId} onSelect={(id) => shell.setActiveTool(id)} />
 

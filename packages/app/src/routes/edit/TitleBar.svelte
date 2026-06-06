@@ -1,8 +1,7 @@
 <script lang="ts">
 	import { m } from '$lib/paraglide/messages';
 	import { Undo2, Redo2, MonitorPlay, PanelLeft, PanelRight, Search } from 'lucide-svelte';
-	import Roster from '$lib/features/presence/ui/Roster.svelte';
-	import type { PeerPresence } from '$lib/shared/crdt/presence';
+	import Roster, { type RosterPerson } from '$lib/features/presence/ui/Roster.svelte';
 
 	interface Props {
 		/** Whether the left widgets drawer is open (narrow viewports). */
@@ -20,8 +19,10 @@
 		onRedo: () => void;
 		/** Open the command palette (same target as the Cmd/Ctrl-K shortcut). */
 		onOpenPalette: () => void;
-		/** Other collaborators present in this workspace (shown as a roster). */
-		remotePeers?: PeerPresence[];
+		/** Everyone in this workspace, you first (shown as the avatar stack). */
+		people?: RosterPerson[];
+		/** Open the Share / collaborators panel (wires the stack click). */
+		onOpenShare?: () => void;
 	}
 
 	let {
@@ -34,7 +35,8 @@
 		onUndo,
 		onRedo,
 		onOpenPalette,
-		remotePeers = []
+		people = [],
+		onOpenShare
 	}: Props = $props();
 </script>
 
@@ -68,7 +70,7 @@
 	</button>
 
 	<div class="actions">
-		<Roster peers={remotePeers} />
+		<Roster {people} onOpen={onOpenShare} />
 
 		<!-- Shown when the inspector is off-canvas (medium and narrower); opens its drawer. -->
 		<button
