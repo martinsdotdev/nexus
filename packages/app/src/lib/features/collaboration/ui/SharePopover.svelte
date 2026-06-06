@@ -7,7 +7,7 @@
 	// this panel only shows the controls the caller may use.
 	import { Crown, ChevronDown, UserPlus, Link, Copy, Check, Shield, X } from 'lucide-svelte';
 	import type { Member, Role } from '../api/share';
-	import { peerColor } from '../lib/peer-color';
+	import { peerColor } from '$lib/shared/lib/peer-color';
 
 	interface Props {
 		members: Member[];

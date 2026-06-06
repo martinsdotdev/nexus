@@ -18,7 +18,7 @@
 	// crown pip; idle peers dim. Beyond `max` chips it collapses to a "+N" badge. Clicking
 	// opens Share (when an open handler is supplied). Hidden when nobody is here.
 	import { Crown } from 'lucide-svelte';
-	import { peerColor } from '../lib/peer-color';
+	import { peerColor } from '$lib/shared/lib/peer-color';
 
 	interface Props {
 		people: RosterPerson[];

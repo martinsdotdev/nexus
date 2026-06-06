@@ -7,16 +7,11 @@
 	import SceneStrip from './SceneStrip.svelte';
 	import { createWorkspaceClient, type WorkspaceClient } from '$lib/shared/crdt/client.svelte';
 	import type { PeerIdentity } from '$lib/shared/crdt/presence';
-	import SharePopover from '$lib/features/presence/ui/SharePopover.svelte';
+	import SharePopover from '$lib/features/collaboration/ui/SharePopover.svelte';
 	import {
-		listMembers,
-		inviteMember,
-		setMemberRole,
-		removeMember,
-		mintOverlayToken,
-		type Member,
-		type Role
-	} from '$lib/features/presence/api/share';
+		createCollaboration,
+		type Collaboration
+	} from '$lib/features/collaboration/model/collaboration.svelte';
 	import EditorCanvas from '$lib/features/canvas-compose/ui/EditorCanvas.svelte';
 	import Inspector from '$lib/features/inspector/ui/Inspector.svelte';
 	import ThemeBuilder from '$lib/features/theme-builder/ui/ThemeBuilder.svelte';
@@ -54,12 +49,12 @@
 
 	let workspace = $state<WorkspaceClient | null>(null);
 	let selfIdentity = $state<PeerIdentity | undefined>(undefined);
-	let activeWorkspaceId = $state<string | null>(null);
+	let collaboration = $state<Collaboration | null>(null);
+	let shareOpen = $state(false);
 	$effect(() => {
 		// In cloud mode the workspace is chosen by the picker (/edit?workspace=<id>); local
 		// mode ignores it and serves its single workspace.
 		const workspaceId = new URLSearchParams(location.search).get('workspace');
-		activeWorkspaceId = workspaceId;
 		const base = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/sync`;
 		const url = workspaceId ? `${base}?workspace=${encodeURIComponent(workspaceId)}` : base;
 		let client: WorkspaceClient | null = null;
@@ -70,10 +65,17 @@
 			selfIdentity = identity;
 			client = createWorkspaceClient(url, { identity });
 			workspace = client;
+			// Cloud mode: a collaboration store owns this workspace's members + sharing.
+			if (workspaceId && identity) {
+				const collab = createCollaboration(workspaceId, identity.id);
+				collaboration = collab;
+				void collab.load();
+			}
 		})();
 		return () => {
 			disposed = true;
 			client?.dispose();
+			collaboration = null;
 		};
 	});
 	const sceneCards = $derived(
@@ -94,33 +96,11 @@
 	);
 	const themes = $derived(workspace?.workspace.themes ?? []);
 
-	// Collaborators (cloud mode): the workspace's members + roles, loaded once signed in and
-	// refreshed after share actions. Drives the host crown in the roster and the Share panel.
-	let members = $state<Member[]>([]);
-	let shareOpen = $state(false);
-	let watchLink = $state<string | null>(null);
-
-	async function loadMembers() {
-		if (!activeWorkspaceId) return;
-		try {
-			members = await listMembers(activeWorkspaceId);
-		} catch {
-			members = [];
-		}
-	}
-
-	$effect(() => {
-		if (activeWorkspaceId && selfIdentity) void loadMembers();
-	});
-
-	const myRole = $derived<Role>(
-		members.find((member) => member.user_id === selfIdentity?.id)?.role ?? 'viewer'
-	);
-	const shareLive = $derived(members.length > 1 || watchLink !== null);
-
-	// Everyone in this workspace for the titlebar avatar stack: you first (when signed in),
-	// then the live remote peers, each annotated as host when they own the workspace.
+	// The titlebar avatar stack: you first (when signed in), then the live remote peers, each
+	// annotated as host when they own the workspace. This bridges presence (live cursors) with
+	// collaboration (member roles) — the page's job, since a feature may not import another.
 	const rosterPeople = $derived.by(() => {
+		const members = collaboration?.members ?? [];
 		const roleOf = (id: string) => members.find((member) => member.user_id === id)?.role;
 		const others = (workspace?.remotePeers ?? []).map((p) => ({
 			id: p.user.id,
@@ -142,38 +122,7 @@
 
 	function openShare() {
 		shareOpen = true;
-		void loadMembers();
-	}
-
-	async function invitePerson(email: string, role: Role): Promise<string | null> {
-		if (!activeWorkspaceId) return 'No workspace is open.';
-		const res = await inviteMember(activeWorkspaceId, email, role);
-		if (res.status === 404) return 'No Nexus account uses that email yet.';
-		if (!res.ok) return 'Could not send the invite.';
-		await loadMembers();
-		return null;
-	}
-
-	async function changeRole(userId: string, role: Role) {
-		if (!activeWorkspaceId) return;
-		await setMemberRole(activeWorkspaceId, userId, role);
-		await loadMembers();
-	}
-
-	async function removePerson(userId: string) {
-		if (!activeWorkspaceId) return;
-		await removeMember(activeWorkspaceId, userId);
-		await loadMembers();
-	}
-
-	async function createWatchLink() {
-		if (!activeWorkspaceId) return;
-		try {
-			const token = await mintOverlayToken(activeWorkspaceId);
-			watchLink = `${location.origin}/overlay?token=${token}`;
-		} catch {
-			// Leave the link unset; the panel keeps offering to create one.
-		}
+		void collaboration?.load();
 	}
 
 	// Broadcast this editor's selection to collaborators whenever it changes (covers
@@ -359,7 +308,7 @@
 		people={rosterPeople}
 		syncState={workspace?.connection ?? 'syncing'}
 		onOpenShare={selfIdentity ? openShare : undefined}
-		{shareLive}
+		shareLive={collaboration?.shareLive ?? false}
 	/>
 	<ToolRail activeToolId={shell.activeToolId} onSelect={(id) => shell.setActiveTool(id)} />
 
@@ -429,17 +378,17 @@
 	onSelect={runCommand}
 />
 
-{#if shareOpen && selfIdentity}
+{#if shareOpen && selfIdentity && collaboration}
 	<SharePopover
-		{members}
+		members={collaboration.members}
 		selfId={selfIdentity.id}
-		{myRole}
-		{watchLink}
+		myRole={collaboration.myRole}
+		watchLink={collaboration.watchLink}
 		onClose={() => (shareOpen = false)}
-		onInvite={invitePerson}
-		onSetRole={changeRole}
-		onRemove={removePerson}
-		onCreateWatchLink={createWatchLink}
+		onInvite={collaboration.invite}
+		onSetRole={collaboration.setRole}
+		onRemove={collaboration.remove}
+		onCreateWatchLink={collaboration.createWatchLink}
 	/>
 {/if}
 

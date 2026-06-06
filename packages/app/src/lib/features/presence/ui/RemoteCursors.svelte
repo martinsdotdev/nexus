@@ -5,7 +5,7 @@
 	// and the position tweens (90ms) so a peer's cursor glides between the throttled updates
 	// it sends. Presentational and inert (pointer-events: none).
 	import type { PeerPresence } from '$lib/shared/crdt/presence';
-	import { peerColor } from '../lib/peer-color';
+	import { peerColor } from '$lib/shared/lib/peer-color';
 
 	/** How a peer's name rides with their cursor. */
 	type TagStyle = 'solid' | 'minimal' | 'none';

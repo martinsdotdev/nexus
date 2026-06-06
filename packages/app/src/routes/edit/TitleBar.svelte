@@ -3,7 +3,7 @@
 	import { Undo2, Redo2, MonitorPlay, PanelLeft, PanelRight, Search } from 'lucide-svelte';
 	import Roster, { type RosterPerson } from '$lib/features/presence/ui/Roster.svelte';
 	import SyncPill from '$lib/features/presence/ui/SyncPill.svelte';
-	import ShareButton from '$lib/features/presence/ui/ShareButton.svelte';
+	import ShareButton from '$lib/features/collaboration/ui/ShareButton.svelte';
 	import type { ConnectionState } from '$lib/shared/crdt/sync-bridge';
 
 	interface Props {

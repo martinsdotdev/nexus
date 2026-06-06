@@ -6,7 +6,7 @@
 	// inert; uses committed widget rects (what remote peers see), not the local drag preview.
 	import type { PeerPresence } from '$lib/shared/crdt/presence';
 	import type { WidgetView } from '$lib/shared/crdt/workspace-view';
-	import { peerColor } from '../lib/peer-color';
+	import { peerColor } from '$lib/shared/lib/peer-color';
 
 	interface Props {
 		peers: PeerPresence[];
