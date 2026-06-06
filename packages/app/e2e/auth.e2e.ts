@@ -102,7 +102,7 @@ test.afterAll(async () => {
 	if (dataDir) rmSync(dataDir, { recursive: true, force: true });
 });
 
-test('a streamer signs in with an email code and lands in the editor', async ({ page }) => {
+test('a streamer signs in with an email code and opens their workspace', async ({ page }) => {
 	const email = 'streamer@example.com';
 
 	await page.goto(`${BASE}/login`);
@@ -115,11 +115,18 @@ test('a streamer signs in with an email code and lands in the editor', async ({ 
 	const code = await waitForCode(email);
 	expect(code).toMatch(/^[A-Z2-9]{8}$/);
 
-	// Step 2: submit the code; the session lands us in the editor.
+	// Step 2: submit the code; the session lands us on the workspace picker.
 	await page.getByRole('textbox', { name: 'Verification code' }).fill(code);
 	await page.getByRole('button', { name: 'Sign in' }).click();
 
-	await expect(page).toHaveURL(/\/edit$/);
+	// This first sign-in claims the bootstrapped workspace, so the picker lists it.
+	await expect(page).toHaveURL(/\/workspaces$/);
+	const workspace = page.getByRole('button', { name: /My Overlays/ });
+	await expect(workspace).toBeVisible();
+
+	// Opening it routes the editor to that workspace.
+	await workspace.click();
+	await expect(page).toHaveURL(/\/edit\?workspace=/);
 
 	// The session cookie is set, and it authenticates an API call from the editor origin.
 	const cookies = await page.context().cookies();
