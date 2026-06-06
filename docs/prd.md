@@ -12,7 +12,7 @@ TBD, working framing in spec §1.1 and §1.2 (the gap in the streaming-overlay l
 
 ## 2. Vision
 
-TBD, extension of the wedge ("one overlay, not seven services") into a multi-version, multi-persona vision.
+TBD, extension of the wedge (a single overlay replacing the usual pile of services) into a multi-version, multi-persona vision.
 
 ## 3. Personas
 

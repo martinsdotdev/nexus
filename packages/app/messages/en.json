@@ -28,7 +28,6 @@
 	"editor.command.fire_test_alert": "Fire test alert",
 	"editor.canvas.dimensions": "1920 x 1080",
 	"login.title": "Sign in to Nexus",
-	"login.subtitle": "One overlay, not seven services.",
 	"login.email_label": "Email",
 	"login.email_placeholder": "you@example.com",
 	"login.send_code": "Send code",

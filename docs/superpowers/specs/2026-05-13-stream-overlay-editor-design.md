@@ -26,7 +26,7 @@ Non-technical streamers who currently assemble overlays from multiple services (
 
 ### 1.4 Wedge
 
-**"One overlay, not seven services."** Taste-grade design is the visible expression; unification of fragmented widgets is the deeper benefit. Curated aesthetic identities (four themes in v1) ship at portfolio quality. Viewer interactivity is a first-class primitive baked into the runtime from day one.
+Unification of fragmented widgets is the wedge: one overlay in place of the usual pile of services, with taste-grade design as its visible expression. Curated aesthetic identities (four themes in v1) ship at portfolio quality. Viewer interactivity is a first-class primitive baked into the runtime from day one.
 
 ### 1.5 v1 scope (this spec)
 

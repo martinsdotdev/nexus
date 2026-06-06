@@ -15,7 +15,6 @@
 		<header class="head">
 			<span class="mark">{m['app.name']()}</span>
 			<h1 class="title">{m['login.title']()}</h1>
-			<p class="subtitle">{m['login.subtitle']()}</p>
 		</header>
 		<LoginForm onAuthenticated={() => goto(resolve('/workspaces'))} />
 	</section>
@@ -54,14 +53,9 @@
 	}
 
 	.title {
-		margin: var(--space-2) 0 var(--space-1);
+		margin: var(--space-2) 0 0;
 		font-size: var(--text-xl);
 		font-weight: 600;
 		line-height: var(--leading-tight);
-	}
-
-	.subtitle {
-		color: var(--muted-foreground);
-		font-size: var(--text-sm);
 	}
 </style>
