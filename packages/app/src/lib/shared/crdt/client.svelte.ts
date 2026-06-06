@@ -6,7 +6,7 @@
 // (ADR-0005). Must be created client-side only (it touches WASM + WebSocket).
 
 import { LoroDoc, UndoManager } from 'loro-crdt';
-import { connectSync, type SyncConnection } from './sync-bridge';
+import { connectSync, type SyncConnection, type ConnectionState } from './sync-bridge';
 import {
 	readWorkspace,
 	type SceneView,
@@ -28,6 +28,8 @@ export interface WorkspaceClient {
 	readonly canRedo: boolean;
 	/** Other editors currently present (cursors, selections), de-duped by account. */
 	readonly remotePeers: PeerPresence[];
+	/** The live link to the relay (for the sync-status pill). */
+	readonly connection: ConnectionState;
 	/** Share this editor's pointer position (virtual canvas coordinates). */
 	setCursor(x: number, y: number): void;
 	/** Share this editor's current widget selection. */
@@ -72,8 +74,12 @@ export function createWorkspaceClient(
 	// channel. Disabled when there is no identity (local mode has no signed-in account).
 	let presenceVersion = $state(0);
 	let presence: Presence | undefined;
+	let connectionState = $state<ConnectionState>('syncing');
 	const sync: SyncConnection = connectSync(doc, url, {
-		onPresence: (bytes) => presence?.apply(bytes)
+		onPresence: (bytes) => presence?.apply(bytes),
+		onState: (state) => {
+			connectionState = state;
+		}
 	});
 	let presenceUnsub = () => {};
 	if (options.identity) {
@@ -130,6 +136,9 @@ export function createWorkspaceClient(
 		get remotePeers(): PeerPresence[] {
 			void presenceVersion;
 			return presence?.remotePeers() ?? [];
+		},
+		get connection(): ConnectionState {
+			return connectionState;
 		},
 		setCursor(x, y) {
 			presence?.setCursor(x, y);

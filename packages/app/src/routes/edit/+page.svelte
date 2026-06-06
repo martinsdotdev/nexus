@@ -275,6 +275,7 @@
 		onRedo={() => workspace?.redo()}
 		onOpenPalette={() => shell.togglePalette()}
 		people={rosterPeople}
+		syncState={workspace?.connection ?? 'syncing'}
 	/>
 	<ToolRail activeToolId={shell.activeToolId} onSelect={(id) => shell.setActiveTool(id)} />
 

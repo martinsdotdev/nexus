@@ -2,6 +2,8 @@
 	import { m } from '$lib/paraglide/messages';
 	import { Undo2, Redo2, MonitorPlay, PanelLeft, PanelRight, Search } from 'lucide-svelte';
 	import Roster, { type RosterPerson } from '$lib/features/presence/ui/Roster.svelte';
+	import SyncPill from '$lib/features/presence/ui/SyncPill.svelte';
+	import type { ConnectionState } from '$lib/shared/crdt/sync-bridge';
 
 	interface Props {
 		/** Whether the left widgets drawer is open (narrow viewports). */
@@ -21,6 +23,8 @@
 		onOpenPalette: () => void;
 		/** Everyone in this workspace, you first (shown as the avatar stack). */
 		people?: RosterPerson[];
+		/** The live relay connection state (shown as the sync pill). */
+		syncState?: ConnectionState;
 		/** Open the Share / collaborators panel (wires the stack click). */
 		onOpenShare?: () => void;
 	}
@@ -36,7 +40,8 @@
 		onRedo,
 		onOpenPalette,
 		people = [],
-		onOpenShare
+		onOpenShare,
+		syncState = 'syncing'
 	}: Props = $props();
 </script>
 
@@ -52,6 +57,7 @@
 			<PanelLeft size={16} />
 		</button>
 		<span class="mark">{m['app.name']()}</span>
+		<SyncPill state={syncState} />
 		<span class="chip" title={m['editor.titlebar.draft']()}>{m['editor.titlebar.draft']()}</span>
 	</div>
 
