@@ -119,7 +119,7 @@ test('a member sees another collaborator’s live cursor', async ({ browser }) =
 	// Alice creates a workspace and invites Bob. Same-origin fetches from her page carry
 	// her session cookie and the Sec-Fetch-Site header the CSRF guard checks.
 	const id = await alicePage.evaluate(async () => {
-		const res = await fetch('/workspaces', {
+		const res = await fetch('/api/workspaces', {
 			method: 'POST',
 			headers: { 'content-type': 'application/json' },
 			credentials: 'include',
@@ -128,7 +128,7 @@ test('a member sees another collaborator’s live cursor', async ({ browser }) =
 		return ((await res.json()) as { id: string }).id;
 	});
 	const inviteStatus = await alicePage.evaluate(async (workspaceId) => {
-		const res = await fetch(`/workspaces/${workspaceId}/members`, {
+		const res = await fetch(`/api/workspaces/${workspaceId}/members`, {
 			method: 'POST',
 			headers: { 'content-type': 'application/json' },
 			credentials: 'include',

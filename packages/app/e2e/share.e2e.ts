@@ -119,7 +119,7 @@ test('the owner manages collaborators from the Share panel', async ({ browser })
 
 	// Alice creates a workspace and opens it.
 	const id = await alicePage.evaluate(async () => {
-		const res = await fetch('/workspaces', {
+		const res = await fetch('/api/workspaces', {
 			method: 'POST',
 			headers: { 'content-type': 'application/json' },
 			credentials: 'include',

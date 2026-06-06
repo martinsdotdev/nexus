@@ -26,7 +26,7 @@
 
 	async function load() {
 		try {
-			const res = await fetch('/workspaces', { credentials: 'include' });
+			const res = await fetch('/api/workspaces', { credentials: 'include' });
 			if (res.status === 401) {
 				goto(resolve('/login'));
 				return;
@@ -53,7 +53,7 @@
 		onSubmit: async ({ value }) => {
 			error = null;
 			try {
-				const res = await fetch('/workspaces', {
+				const res = await fetch('/api/workspaces', {
 					method: 'POST',
 					headers: { 'content-type': 'application/json' },
 					credentials: 'include',

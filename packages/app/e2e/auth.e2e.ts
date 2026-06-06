@@ -124,6 +124,11 @@ test('a streamer signs in with an email code and opens their workspace', async (
 	const workspace = page.getByRole('button', { name: /My Overlays/ });
 	await expect(workspace).toBeVisible();
 
+	// A hard reload of /workspaces must serve the SPA page, not the /api/workspaces JSON the
+	// API route once shadowed; the picker still renders its row after a full document load.
+	await page.reload();
+	await expect(workspace).toBeVisible();
+
 	// Opening it routes the editor to that workspace.
 	await workspace.click();
 	await expect(page).toHaveURL(/\/edit\?workspace=/);

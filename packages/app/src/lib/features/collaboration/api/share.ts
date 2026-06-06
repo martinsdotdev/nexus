@@ -17,13 +17,13 @@ export interface Member {
 const JSON_HEADERS = { 'content-type': 'application/json' };
 
 export async function listMembers(workspaceId: string): Promise<Member[]> {
-	const res = await fetch(`/workspaces/${workspaceId}/members`, { credentials: 'include' });
+	const res = await fetch(`/api/workspaces/${workspaceId}/members`, { credentials: 'include' });
 	if (!res.ok) throw new Error(`list members failed: ${res.status}`);
 	return (await res.json()) as Member[];
 }
 
 export function inviteMember(workspaceId: string, email: string, role: Role): Promise<Response> {
-	return fetch(`/workspaces/${workspaceId}/members`, {
+	return fetch(`/api/workspaces/${workspaceId}/members`, {
 		method: 'POST',
 		headers: JSON_HEADERS,
 		credentials: 'include',
@@ -32,7 +32,7 @@ export function inviteMember(workspaceId: string, email: string, role: Role): Pr
 }
 
 export function setMemberRole(workspaceId: string, userId: string, role: Role): Promise<Response> {
-	return fetch(`/workspaces/${workspaceId}/members/${userId}`, {
+	return fetch(`/api/workspaces/${workspaceId}/members/${userId}`, {
 		method: 'PUT',
 		headers: JSON_HEADERS,
 		credentials: 'include',
@@ -41,14 +41,14 @@ export function setMemberRole(workspaceId: string, userId: string, role: Role): 
 }
 
 export function removeMember(workspaceId: string, userId: string): Promise<Response> {
-	return fetch(`/workspaces/${workspaceId}/members/${userId}`, {
+	return fetch(`/api/workspaces/${workspaceId}/members/${userId}`, {
 		method: 'DELETE',
 		credentials: 'include'
 	});
 }
 
 export async function mintOverlayToken(workspaceId: string): Promise<string> {
-	const res = await fetch(`/workspaces/${workspaceId}/overlay-token`, {
+	const res = await fetch(`/api/workspaces/${workspaceId}/overlay-token`, {
 		method: 'POST',
 		headers: JSON_HEADERS,
 		credentials: 'include'

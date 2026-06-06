@@ -222,16 +222,16 @@ fn internal<E: std::fmt::Display>(err: E) -> StatusCode {
 /// The cloud-mode workspace routes, with the CSRF guard layered on.
 pub fn router() -> Router<AppState> {
     Router::new()
-        .route("/workspaces", get(list_workspaces).post(create_workspace))
+        .route("/api/workspaces", get(list_workspaces).post(create_workspace))
         .route(
-            "/workspaces/{id}/members",
+            "/api/workspaces/{id}/members",
             get(list_members).post(invite_member),
         )
         .route(
-            "/workspaces/{id}/members/{user}",
+            "/api/workspaces/{id}/members/{user}",
             put(set_member_role).delete(remove_member),
         )
-        .route("/workspaces/{id}/overlay-token", post(mint_overlay_token))
+        .route("/api/workspaces/{id}/overlay-token", post(mint_overlay_token))
         .layer(middleware::from_fn(csrf_guard))
 }
 
@@ -339,7 +339,7 @@ mod tests {
 
         // Create a workspace.
         let resp = build_app(state.clone(), None)
-            .oneshot(post("/workspaces", &owner_cookie, r#"{"name":"Team"}"#))
+            .oneshot(post("/api/workspaces", &owner_cookie, r#"{"name":"Team"}"#))
             .await
             .unwrap();
         assert_eq!(resp.status(), StatusCode::OK);
@@ -349,7 +349,7 @@ mod tests {
         let resp = build_app(state.clone(), None)
             .oneshot(
                 Request::builder()
-                    .uri("/workspaces")
+                    .uri("/api/workspaces")
                     .header("cookie", format!("nexus_session={owner_cookie}"))
                     .body(Body::empty())
                     .unwrap(),
@@ -364,7 +364,7 @@ mod tests {
         seed_user_with_email(&pool, "editor@example.com").await;
         let resp = build_app(state.clone(), None)
             .oneshot(post(
-                &format!("/workspaces/{ws_id}/members"),
+                &format!("/api/workspaces/{ws_id}/members"),
                 &owner_cookie,
                 r#"{"email":"editor@example.com"}"#,
             ))
@@ -375,7 +375,7 @@ mod tests {
         // Inviting an unknown email is a 404.
         let resp = build_app(state.clone(), None)
             .oneshot(post(
-                &format!("/workspaces/{ws_id}/members"),
+                &format!("/api/workspaces/{ws_id}/members"),
                 &owner_cookie,
                 r#"{"email":"ghost@example.com"}"#,
             ))
@@ -405,7 +405,7 @@ mod tests {
 
         let resp = build_app(state.clone(), None)
             .oneshot(post(
-                &format!("/workspaces/{}/members", ws.0),
+                &format!("/api/workspaces/{}/members", ws.0),
                 &editor_cookie,
                 r#"{"email":"o@example.com"}"#,
             ))
@@ -435,7 +435,7 @@ mod tests {
         // The owner lists members (both rows).
         let resp = build_app(state.clone(), None)
             .oneshot(get_req(
-                &format!("/workspaces/{}/members", ws.0),
+                &format!("/api/workspaces/{}/members", ws.0),
                 &owner_cookie,
             ))
             .await
@@ -447,7 +447,7 @@ mod tests {
         let resp = build_app(state.clone(), None)
             .oneshot(req(
                 "PUT",
-                &format!("/workspaces/{}/members/{}", ws.0, editor),
+                &format!("/api/workspaces/{}/members/{}", ws.0, editor),
                 &owner_cookie,
                 r#"{"role":"viewer"}"#,
             ))
@@ -481,7 +481,7 @@ mod tests {
         let resp = build_app(state.clone(), None)
             .oneshot(req(
                 "PUT",
-                &format!("/workspaces/{}/members/{}", ws.0, owner),
+                &format!("/api/workspaces/{}/members/{}", ws.0, owner),
                 &editor_cookie,
                 r#"{"role":"viewer"}"#,
             ))
@@ -505,7 +505,7 @@ mod tests {
         let resp = build_app(state.clone(), None)
             .oneshot(req(
                 "POST",
-                &format!("/workspaces/{}/overlay-token", ws.0),
+                &format!("/api/workspaces/{}/overlay-token", ws.0),
                 &owner_cookie,
                 "",
             ))
@@ -528,7 +528,7 @@ mod tests {
         let resp = build_app(state.clone(), None)
             .oneshot(req(
                 "POST",
-                &format!("/workspaces/{}/overlay-token", ws.0),
+                &format!("/api/workspaces/{}/overlay-token", ws.0),
                 &viewer_cookie,
                 "",
             ))
