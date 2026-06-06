@@ -26,6 +26,8 @@
 		autocomplete?: HTMLInputAttributes['autocomplete'];
 		inputmode?: 'text' | 'email' | 'numeric' | 'tel' | 'url' | 'search';
 		maxlength?: number;
+		/** Monospace, letter-spaced, uppercase, for codes and keys (e.g. the login OTP). */
+		mono?: boolean;
 	}
 	let {
 		value,
@@ -41,7 +43,8 @@
 		name,
 		autocomplete,
 		inputmode,
-		maxlength
+		maxlength,
+		mono = false
 	}: Props = $props();
 
 	const invalid = $derived(!!error);
@@ -57,6 +60,7 @@
 		{autocomplete}
 		{inputmode}
 		{maxlength}
+		data-mono={mono ? '' : undefined}
 		aria-label={label ? undefined : ariaLabel}
 		oninput={(event) => oninput?.((event.currentTarget as HTMLInputElement).value)}
 		onblur={() => onblur?.()}
@@ -104,6 +108,12 @@
 
 	:global([data-scope='field'][data-part='input'][data-invalid]) {
 		border-color: var(--destructive);
+	}
+
+	:global([data-scope='field'][data-part='input'][data-mono]) {
+		font-family: var(--font-mono);
+		letter-spacing: 0.28em;
+		text-transform: uppercase;
 	}
 
 	:global([data-scope='field'][data-part='helper-text']) {

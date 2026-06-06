@@ -6,6 +6,7 @@
 	import { resolve } from '$app/paths';
 	import { m } from '$lib/paraglide/messages';
 	import LoginForm from './LoginForm.svelte';
+	import Toaster from '$lib/shared/ui/Toaster.svelte';
 </script>
 
 <svelte:head><title>{m['login.title']()}</title></svelte:head>
@@ -19,6 +20,8 @@
 		<LoginForm onAuthenticated={() => goto(resolve('/workspaces'))} />
 	</section>
 </main>
+
+<Toaster />
 
 <style>
 	.auth {

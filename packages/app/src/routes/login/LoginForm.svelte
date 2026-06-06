@@ -1,11 +1,14 @@
 <script lang="ts">
-	// The email one-time-code sign-in form (ADR-0010), a two-step state machine: enter an
-	// email to request a code, then enter the code to establish a session. It talks to the
-	// cloud-mode relay over plain HTTP (same-origin, so the browser sends the session
-	// cookie and the `Sec-Fetch-Site` header the CSRF guard checks). The route owns
-	// navigation; this component reports success through `onAuthenticated` so it can be
-	// tested without a router.
+	// The email one-time-code sign-in (ADR-0010): a two-step machine (request a code, then
+	// verify it), each step backed by TanStack Form with a pure validator (shared/lib) shown
+	// inline through the Ark Field wrapper. Server outcomes surface as a form-level alert, and
+	// a success toast confirms the code was sent. The route owns navigation; this reports
+	// success through `onAuthenticated`, so it stays router-free and testable.
+	import { createForm } from '@tanstack/svelte-form';
 	import { m } from '$lib/paraglide/messages';
+	import Field from '$lib/shared/ui/Field.svelte';
+	import { toast } from '$lib/shared/ui/toast';
+	import { emailError, loginCodeError } from '$lib/shared/lib/validators';
 
 	interface Props {
 		/** Called once a verified code has established the session. */
@@ -15,111 +18,149 @@
 
 	type Step = 'email' | 'code';
 	let step = $state<Step>('email');
-	let email = $state('');
-	let code = $state('');
-	let pending = $state(false);
-	let error = $state<string | null>(null);
+	let sentTo = $state('');
+	let serverError = $state<string | null>(null);
 
-	async function requestCode(event: SubmitEvent) {
-		event.preventDefault();
-		error = null;
-		pending = true;
-		try {
-			const res = await fetch('/auth/email', {
-				method: 'POST',
-				headers: { 'content-type': 'application/json' },
-				credentials: 'include',
-				body: JSON.stringify({ email })
-			});
-			if (res.ok) {
-				code = '';
-				step = 'code';
-			} else if (res.status === 400) {
-				error = m['login.error_email']();
-			} else {
-				error = m['login.error_network']();
+	const emailForm = createForm(() => ({
+		defaultValues: { email: '' },
+		onSubmit: async ({ value }) => {
+			serverError = null;
+			try {
+				const res = await fetch('/auth/email', {
+					method: 'POST',
+					headers: { 'content-type': 'application/json' },
+					credentials: 'include',
+					body: JSON.stringify({ email: value.email })
+				});
+				if (res.ok) {
+					sentTo = value.email;
+					step = 'code';
+					toast.success(m['login.code_sent']({ email: value.email }));
+				} else if (res.status === 400) {
+					serverError = m['login.error_email']();
+				} else {
+					serverError = m['login.error_network']();
+				}
+			} catch {
+				serverError = m['login.error_network']();
 			}
-		} catch {
-			error = m['login.error_network']();
-		} finally {
-			pending = false;
 		}
-	}
+	}));
 
-	async function verifyCode(event: SubmitEvent) {
-		event.preventDefault();
-		error = null;
-		pending = true;
-		try {
-			const res = await fetch('/auth/email/verify', {
-				method: 'POST',
-				headers: { 'content-type': 'application/json' },
-				credentials: 'include',
-				body: JSON.stringify({ code: code.trim().toUpperCase() })
-			});
-			if (res.ok) {
-				onAuthenticated?.();
-			} else if (res.status === 429) {
-				error = m['login.error_rate_limited']();
-			} else {
-				error = m['login.error_code']();
+	const codeForm = createForm(() => ({
+		defaultValues: { code: '' },
+		onSubmit: async ({ value }) => {
+			serverError = null;
+			try {
+				const res = await fetch('/auth/email/verify', {
+					method: 'POST',
+					headers: { 'content-type': 'application/json' },
+					credentials: 'include',
+					body: JSON.stringify({ code: value.code.trim().toUpperCase() })
+				});
+				if (res.ok) {
+					onAuthenticated?.();
+				} else if (res.status === 429) {
+					serverError = m['login.error_rate_limited']();
+				} else {
+					serverError = m['login.error_code']();
+				}
+			} catch {
+				serverError = m['login.error_network']();
 			}
-		} catch {
-			error = m['login.error_network']();
-		} finally {
-			pending = false;
 		}
-	}
+	}));
 
 	function restart() {
 		step = 'email';
-		code = '';
-		error = null;
+		serverError = null;
+		codeForm.reset();
 	}
 </script>
 
 {#if step === 'email'}
-	<form class="form" onsubmit={requestCode}>
-		<label class="field">
-			<span class="label">{m['login.email_label']()}</span>
-			<input
-				class="input"
-				type="email"
-				name="email"
-				autocomplete="email"
-				autocapitalize="off"
-				spellcheck="false"
-				placeholder={m['login.email_placeholder']()}
-				required
-				bind:value={email}
-			/>
-		</label>
-		{#if error}<p class="error" role="alert">{error}</p>{/if}
-		<button class="submit" type="submit" disabled={pending} aria-busy={pending}>
-			{pending ? m['login.sending']() : m['login.send_code']()}
-		</button>
+	<form
+		class="form"
+		onsubmit={(event) => {
+			event.preventDefault();
+			emailForm.handleSubmit();
+		}}
+	>
+		<emailForm.Field
+			name="email"
+			validators={{
+				onBlur: ({ value }) => emailError(value),
+				onSubmit: ({ value }) => emailError(value)
+			}}
+		>
+			{#snippet children(field)}
+				<Field
+					label={m['login.email_label']()}
+					type="email"
+					autocomplete="email"
+					placeholder={m['login.email_placeholder']()}
+					value={field.state.value}
+					oninput={(v) => field.handleChange(v)}
+					onblur={() => field.handleBlur()}
+					error={field.state.meta.errors[0]}
+					required
+				/>
+			{/snippet}
+		</emailForm.Field>
+
+		{#if serverError}<p class="error" role="alert">{serverError}</p>{/if}
+
+		<emailForm.Subscribe selector={(state) => state.isSubmitting}>
+			{#snippet children(submitting)}
+				<button class="submit" type="submit" disabled={submitting} aria-busy={submitting}>
+					{submitting ? m['login.sending']() : m['login.send_code']()}
+				</button>
+			{/snippet}
+		</emailForm.Subscribe>
 	</form>
 {:else}
-	<form class="form" onsubmit={verifyCode}>
-		<p class="hint">{m['login.code_hint']({ email })}</p>
-		<label class="field">
-			<span class="label">{m['login.code_label']()}</span>
-			<input
-				class="input code"
-				type="text"
-				name="code"
-				autocomplete="one-time-code"
-				autocapitalize="characters"
-				spellcheck="false"
-				maxlength="8"
-				required
-				bind:value={code}
-			/>
-		</label>
-		{#if error}<p class="error" role="alert">{error}</p>{/if}
-		<button class="submit" type="submit" disabled={pending} aria-busy={pending}>
-			{pending ? m['login.verifying']() : m['login.verify']()}
-		</button>
+	<form
+		class="form"
+		onsubmit={(event) => {
+			event.preventDefault();
+			codeForm.handleSubmit();
+		}}
+	>
+		<p class="hint">{m['login.code_hint']({ email: sentTo })}</p>
+
+		<codeForm.Field
+			name="code"
+			validators={{
+				onBlur: ({ value }) => loginCodeError(value),
+				onSubmit: ({ value }) => loginCodeError(value)
+			}}
+		>
+			{#snippet children(field)}
+				<Field
+					label={m['login.code_label']()}
+					autocomplete="one-time-code"
+					inputmode="text"
+					maxlength={8}
+					mono
+					value={field.state.value}
+					oninput={(v) => field.handleChange(v)}
+					onblur={() => field.handleBlur()}
+					error={field.state.meta.errors[0]}
+					required
+				/>
+			{/snippet}
+		</codeForm.Field>
+
+		{#if serverError}<p class="error" role="alert">{serverError}</p>{/if}
+
+		<codeForm.Subscribe selector={(state) => state.isSubmitting}>
+			{#snippet children(submitting)}
+				<button class="submit" type="submit" disabled={submitting} aria-busy={submitting}>
+					{submitting ? m['login.verifying']() : m['login.verify']()}
+				</button>
+			{/snippet}
+		</codeForm.Subscribe>
+
 		<button class="link" type="button" onclick={restart}>
 			{m['login.use_different_email']()}
 		</button>
@@ -133,46 +174,10 @@
 		gap: var(--space-3);
 	}
 
-	.field {
-		display: flex;
-		flex-direction: column;
-		gap: var(--space-1);
-	}
-
-	.label {
-		font-size: var(--text-sm);
-		color: var(--muted-foreground);
-	}
-
 	.hint {
 		font-size: var(--text-sm);
 		color: var(--muted-foreground);
 		line-height: var(--leading-base);
-	}
-
-	.input {
-		height: 36px;
-		padding: 0 var(--space-3);
-		background: var(--input);
-		border: var(--stroke-thin) solid var(--border);
-		border-radius: var(--radius-md);
-		font-size: var(--text-base);
-		transition: border-color var(--dur-fast) var(--ease-out);
-	}
-
-	.input::placeholder {
-		color: var(--muted-foreground);
-	}
-
-	/* The global :focus-visible rule supplies the ring; the field just tints its border. */
-	.input:focus-visible {
-		border-color: var(--ring);
-	}
-
-	.code {
-		font-family: var(--font-mono);
-		letter-spacing: 0.28em;
-		text-transform: uppercase;
 	}
 
 	.submit {
