@@ -21,6 +21,7 @@
 	import { Select, Collapsible, ColorField } from '$lib/shared/ui';
 	import { toast } from '$lib/shared/ui/toast';
 	import { m } from '$lib/paraglide/messages';
+	import Menu from '$lib/shared/ui/Menu.svelte';
 
 	interface Props {
 		scene: SceneView | null;
@@ -117,6 +118,25 @@
 			toast.error(m['theme.import_invalid']());
 		}
 	}
+
+	const themeActions = $derived(
+		activeTheme
+			? [
+					{ value: 'duplicate', label: 'Duplicate' },
+					{ value: 'export', label: 'Export' },
+					...(activeTheme.protected
+						? []
+						: [{ value: 'delete', label: 'Delete', destructive: true }])
+				]
+			: []
+	);
+
+	function runThemeAction(action: string) {
+		if (!activeTheme) return;
+		if (action === 'duplicate') duplicateTheme();
+		else if (action === 'export') exportActive(activeTheme);
+		else if (action === 'delete') deleteActive(activeTheme);
+	}
 </script>
 
 <div class="theme-builder">
@@ -148,11 +168,7 @@
 				/>
 			</label>
 			<div class="actions">
-				<button class="ghost" onclick={duplicateTheme}>Duplicate</button>
-				<button class="ghost" onclick={() => exportActive(ac)}>Export</button>
-				{#if !ac.protected}
-					<button class="ghost danger" onclick={() => deleteActive(ac)}>Delete</button>
-				{/if}
+				<Menu label="Theme actions" items={themeActions} onSelect={runThemeAction} />
 			</div>
 			{#if ac.protected}
 				<p class="hint">
@@ -264,10 +280,6 @@
 		background: var(--secondary);
 		color: var(--secondary-foreground);
 		cursor: pointer;
-	}
-
-	button.danger {
-		color: var(--destructive);
 	}
 
 	.token-row {

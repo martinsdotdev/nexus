@@ -20,7 +20,8 @@ test('a theme authored in the editor renders on the overlay', async ({ browser }
 
 	const panel = editor.locator('.dock-right');
 	await panel.getByRole('button', { name: 'Customize theme' }).click();
-	await panel.getByRole('button', { name: 'Duplicate' }).click();
+	await panel.getByRole('button', { name: 'Theme actions' }).click();
+	await editor.getByRole('menuitem', { name: 'Duplicate' }).click();
 	// primary is a visual ColorField; open it and set it to black via the hex field.
 	await panel.getByRole('button', { name: 'primary', exact: true }).click();
 	const hex = editor.getByRole('textbox', { name: 'Hex' });

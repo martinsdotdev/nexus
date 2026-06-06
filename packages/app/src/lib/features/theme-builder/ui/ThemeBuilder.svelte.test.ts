@@ -49,7 +49,8 @@ test('editing a non-color token in place reports the new value', async () => {
 test('duplicate forks the active built-in, deriving the copy from it', async () => {
 	const h = handlers();
 	render(ThemeBuilder, { scene: scene('cozy'), themes: [cozy], ...h });
-	await page.getByRole('button', { name: 'Duplicate' }).click();
+	await page.getByRole('button', { name: 'Theme actions' }).click();
+	await page.getByRole('menuitem', { name: 'Duplicate' }).click();
 	expect(h.onCreateTheme).toHaveBeenCalledWith(
 		expect.stringContaining('Cozy'),
 		'cozy',
@@ -58,10 +59,12 @@ test('duplicate forks the active built-in, deriving the copy from it', async () 
 	expect(h.onSetSceneTheme).toHaveBeenCalledWith('s1', 'theme-new');
 });
 
-test('a protected built-in hides Delete', async () => {
+test('a protected built-in hides Delete in the actions menu', async () => {
 	const h = handlers();
 	render(ThemeBuilder, { scene: scene('cozy'), themes: [cozy], ...h });
-	await expect.element(page.getByRole('button', { name: 'Delete' })).not.toBeInTheDocument();
+	await page.getByRole('button', { name: 'Theme actions' }).click();
+	await expect.element(page.getByRole('menuitem', { name: 'Duplicate' })).toBeVisible();
+	await expect.element(page.getByRole('menuitem', { name: 'Delete' })).not.toBeInTheDocument();
 });
 
 test('a protected built-in hides the link control (built-ins hold literals only)', async () => {
@@ -75,7 +78,8 @@ test('a protected built-in hides the link control (built-ins hold literals only)
 test('deleting a custom theme removes it and falls the scene back', async () => {
 	const h = handlers();
 	render(ThemeBuilder, { scene: scene('theme-1'), themes: [theme('theme-1')], ...h });
-	await page.getByRole('button', { name: 'Delete' }).click();
+	await page.getByRole('button', { name: 'Theme actions' }).click();
+	await page.getByRole('menuitem', { name: 'Delete' }).click();
 	expect(h.onDeleteTheme).toHaveBeenCalledWith('theme-1');
 	expect(h.onSetSceneTheme).toHaveBeenCalledWith('s1', 'cozy');
 });
