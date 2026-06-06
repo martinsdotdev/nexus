@@ -25,4 +25,6 @@ test('outlines each existing widget a peer has selected', async () => {
 
 	const container = (await page.getByTestId('remote-selections').element()) as HTMLElement;
 	expect(container.querySelectorAll('.outline')).toHaveLength(1);
+	// The outline carries a name tag identifying the collaborator.
+	expect(container.querySelector('.outline .tag')?.textContent).toBe('Alice');
 });

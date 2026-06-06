@@ -217,7 +217,7 @@
 				{/each}
 			</div>
 
-			<RemoteSelections peers={remotePeers} {widgets} />
+			<RemoteSelections peers={remotePeers} {widgets} {scale} />
 			<SelectionOverlay rect={selectedRect} onStartResize={startResize} />
 			<RemoteCursors peers={remotePeers} {scale} />
 		</div>
