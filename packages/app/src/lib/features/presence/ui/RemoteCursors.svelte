@@ -29,13 +29,14 @@
 	{#each cursors as peer (peer.user.id)}
 		<div class="cursor" style="left: {peer.cursor!.x}px; top: {peer.cursor!.y}px;">
 			<div class="graphic" style="transform: scale({inverse}); --peer: {peerColor(peer.user.id)};">
-				<svg class="arrow" width="22" height="22" viewBox="0 0 24 24" aria-hidden="true">
+				<svg class="arrow" viewBox="0 0 24 24" aria-hidden="true">
 					<path
-						d="M4 3 L4 19 L8.6 14.9 L11.3 21 L14.1 19.8 L11.4 13.8 L17.6 13.8 Z"
+						d="M5 3.5 Q5 2.6 5.8 3.1 L18 13.4 Q18.7 13.9 17.9 14.2 L12.9 14.4 L15.5 20.2 Q15.8 20.9 15 21.2 L13.6 21.8 Q12.9 22 12.6 21.3 L10.1 15.6 L6.3 19 Q5 19.9 5 18.4 Z"
 						fill="var(--peer)"
 						stroke="oklch(99% 0 0)"
-						stroke-width="1.5"
+						stroke-width="1.4"
 						stroke-linejoin="round"
+						stroke-linecap="round"
 					/>
 				</svg>
 				{#if tagStyle !== 'none'}
@@ -70,11 +71,20 @@
 		position: absolute;
 		top: 0;
 		left: 0;
+		/* Explicit size is load-bearing: the graphic is an absolute box inside a zero-width
+		   `.cursor`, and an SVG's min-content inline size is 0, so without a definite width
+		   its shrink-to-fit collapses to 0 and the whole cursor renders invisible. */
+		width: 24px;
+		height: 24px;
 		transform-origin: top left;
 	}
 
 	.arrow {
 		display: block;
+		width: 24px;
+		height: 24px;
+		/* The round-joined stroke rides half outside the path; don't let the svg clip it. */
+		overflow: visible;
 		filter: drop-shadow(0 1px 2px oklch(0% 0 0 / 0.5));
 	}
 

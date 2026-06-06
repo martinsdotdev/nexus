@@ -155,6 +155,12 @@ test('a member sees another collaborator’s live cursor', async ({ browser }) =
 	await expect(bobPage.getByTestId('remote-cursors').locator('.cursor')).toHaveCount(1, {
 		timeout: 15_000
 	});
+	// The pointer must actually be drawn on-screen, not merely present in the DOM: a
+	// count-only check would pass even if a regression collapsed the graphic to zero width
+	// or positioned it off-canvas. Assert the arrow is visible and inside the viewport.
+	const aliceArrow = bobPage.getByTestId('remote-cursors').locator('.arrow');
+	await expect(aliceArrow).toBeVisible();
+	await expect(aliceArrow).toBeInViewport();
 	await expect(bobPage.getByText('alice')).toBeVisible();
 	await expect(bobPage.getByTestId('roster')).toBeVisible();
 
