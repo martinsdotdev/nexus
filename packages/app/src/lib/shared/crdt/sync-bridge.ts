@@ -14,6 +14,9 @@ export interface SyncConnection {
 	close(): void;
 	/** Ship an opaque presence frame to the relay, which forwards it to other peers. */
 	sendPresence(bytes: Uint8Array): void;
+	/** Ship a document update frame (e.g. a published draft) to the relay. `doc.import()`
+	 *  does not fire the local-update subscriber, so the caller re-broadcasts explicitly. */
+	sendUpdate(bytes: Uint8Array): void;
 }
 
 interface SyncOptions {
@@ -91,6 +94,11 @@ export function connectSync(doc: LoroDoc, url: string, options: SyncOptions = {}
 		sendPresence(bytes) {
 			if (ws.readyState === WebSocket.OPEN) {
 				ws.send(encodeFrame({ kind: 'presence', payload: bytes }));
+			}
+		},
+		sendUpdate(bytes) {
+			if (ws.readyState === WebSocket.OPEN) {
+				ws.send(encodeFrame({ kind: 'update', payload: bytes }));
 			}
 		}
 	};

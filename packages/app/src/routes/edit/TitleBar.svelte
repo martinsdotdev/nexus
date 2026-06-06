@@ -5,7 +5,9 @@
 	import SyncPill from '$lib/features/presence/ui/SyncPill.svelte';
 	import ShareButton from '$lib/features/collaboration/ui/ShareButton.svelte';
 	import LayoutSwitcher, { type LayoutNav } from './LayoutSwitcher.svelte';
+	import DraftControl from './DraftControl.svelte';
 	import type { ConnectionState } from '$lib/shared/crdt/sync-bridge';
+	import type { EditorMode } from '$lib/shared/crdt/client.svelte';
 
 	interface Props {
 		/** Whether the left widgets drawer is open (narrow viewports). */
@@ -33,6 +35,11 @@
 		shareLive?: boolean;
 		/** The layout switcher (active layouts + switch / create / duplicate / archive). */
 		layoutNav?: LayoutNav;
+		/** Live/Draft state + actions for the draft control. */
+		mode?: EditorMode;
+		onEnterDraft?: () => void;
+		onPublish?: () => void;
+		onDiscard?: () => void;
 	}
 
 	let {
@@ -49,7 +56,11 @@
 		onOpenShare,
 		syncState = 'syncing',
 		shareLive = false,
-		layoutNav
+		layoutNav,
+		mode = 'live',
+		onEnterDraft = () => {},
+		onPublish = () => {},
+		onDiscard = () => {}
 	}: Props = $props();
 </script>
 
@@ -67,7 +78,7 @@
 		<span class="mark">{m['app.name']()}</span>
 		{#if layoutNav}<LayoutSwitcher {...layoutNav} />{/if}
 		<SyncPill state={syncState} onClick={onOpenShare} />
-		<span class="chip" title={m['editor.titlebar.draft']()}>{m['editor.titlebar.draft']()}</span>
+		<DraftControl {mode} {onEnterDraft} {onPublish} {onDiscard} />
 	</div>
 
 	<!-- Centered command-palette trigger. Styled like a search field so the action is
@@ -151,17 +162,6 @@
 		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;
-	}
-
-	.chip {
-		flex: none;
-		padding: 2px var(--space-2);
-		border-radius: var(--radius-circular);
-		background: var(--invert);
-		color: var(--invert-foreground);
-		font-size: var(--text-xs);
-		font-weight: 600;
-		letter-spacing: 0.02em;
 	}
 
 	/* The centered command-palette trigger, dressed as a recessed search field. */
@@ -283,10 +283,6 @@
 	/* Below the floor, drop the draft chip and OBS label to reclaim width, and collapse
 	   the command bar to an icon-only button so it stops competing for the row. */
 	@media (max-width: 639px) {
-		.chip {
-			display: none;
-		}
-
 		.primary-label {
 			display: none;
 		}

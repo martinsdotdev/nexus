@@ -20,6 +20,9 @@ export interface ShortcutWorkspace {
 	deleteWidget(id: string): void;
 	setWidgetGeometry(id: string, geom: { x: number; y: number }): void;
 	activate(sceneId: string): void;
+	readonly mode: 'live' | 'draft';
+	enterDraft(): void;
+	publish(): void;
 }
 
 /** The active scene, for resolving a nudged widget's current position. */
@@ -66,6 +69,13 @@ export function createEditorShortcuts(
 		if (mod && event.key.toLowerCase() === 'y') {
 			event.preventDefault();
 			workspace.redo();
+			return;
+		}
+		if (mod && event.key.toLowerCase() === 'l') {
+			// Ctrl/Cmd-L: enter draft, or publish the draft to go live.
+			event.preventDefault();
+			if (workspace.mode === 'draft') workspace.publish();
+			else workspace.enterDraft();
 			return;
 		}
 

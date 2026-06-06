@@ -6,7 +6,7 @@ import {
 	type ShortcutWorkspace
 } from './editor-shortcuts';
 
-function setup(selectedWidgetId: string | null = null) {
+function setup(selectedWidgetId: string | null = null, mode: 'live' | 'draft' = 'live') {
 	const shell: ShortcutShell = {
 		togglePalette: vi.fn(),
 		clearSelection: vi.fn(),
@@ -18,7 +18,10 @@ function setup(selectedWidgetId: string | null = null) {
 		redo: vi.fn(),
 		deleteWidget: vi.fn(),
 		setWidgetGeometry: vi.fn(),
-		activate: vi.fn()
+		activate: vi.fn(),
+		mode,
+		enterDraft: vi.fn(),
+		publish: vi.fn()
 	};
 	const scene: ShortcutScene = { widgets: [{ id: 'w1', x: 100, y: 50 }] };
 	const handle = createEditorShortcuts(
@@ -52,6 +55,16 @@ test('Ctrl+Z undoes and Ctrl+Shift+Z redoes', () => {
 	expect(workspace.undo).toHaveBeenCalled();
 	handle(key({ key: 'z', ctrlKey: true, shiftKey: true }));
 	expect(workspace.redo).toHaveBeenCalled();
+});
+
+test('Ctrl+L enters draft from live and publishes from draft', () => {
+	const live = setup();
+	live.handle(key({ key: 'l', ctrlKey: true }));
+	expect(live.workspace.enterDraft).toHaveBeenCalled();
+
+	const draft = setup(null, 'draft');
+	draft.handle(key({ key: 'l', ctrlKey: true }));
+	expect(draft.workspace.publish).toHaveBeenCalled();
 });
 
 test('Delete removes the selected widget and clears selection', () => {

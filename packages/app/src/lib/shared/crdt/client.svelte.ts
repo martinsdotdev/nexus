@@ -1,9 +1,12 @@
-// The editor's local-first workspace client: a Loro replica wired to the relay,
-// exposed to the UI as reactive Svelte state. The local doc IS the store, a
-// version counter (bumped on every doc change, local or remote) drives the
-// `$derived` reads, so the UI re-renders whether an edit was made here or
-// arrived from another collaborator. Replaces TanStack Query for document state
-// (ADR-0005). Must be created client-side only (it touches WASM + WebSocket).
+// The editor's local-first workspace client: a Loro replica wired to the relay, exposed to
+// the UI as reactive Svelte state. The local doc IS the store; a version counter (bumped on
+// every doc change, local or remote) drives the `$derived` reads, so the UI re-renders
+// whether an edit was made here or arrived from another collaborator. Replaces TanStack Query
+// for document state (ADR-0005). Must be created client-side only (it touches WASM + WebSocket).
+//
+// Live/Draft (per-editor): in draft mode the client edits a private fork of the live doc (see
+// ./draft); the live doc keeps syncing, so the overlay + peers show the last live state until
+// Publish merges the fork back in. Reads, writes, undo, and presence all follow the active doc.
 
 import { LoroDoc, UndoManager } from 'loro-crdt';
 import { connectSync, type SyncConnection, type ConnectionState } from './sync-bridge';
@@ -16,9 +19,13 @@ import {
 import * as mutate from './mutations';
 import type { WidgetGeometry } from './mutations';
 import { createPresence, type PeerIdentity, type PeerPresence, type Presence } from './presence';
+import { beginDraft, publishDraft, type Draft } from './draft';
 
 const TREE = 'tree';
 const WORKSPACE = 'workspace';
+
+/** 'live' (edits broadcast immediately) or 'draft' (edits are private until published). */
+export type EditorMode = 'live' | 'draft';
 
 export interface WorkspaceClient {
 	readonly scenes: SceneView[];
@@ -30,6 +37,8 @@ export interface WorkspaceClient {
 	readonly remotePeers: PeerPresence[];
 	/** The live link to the relay (for the sync-status pill). */
 	readonly connection: ConnectionState;
+	/** Whether this editor is editing live or a private draft. */
+	readonly mode: EditorMode;
 	/** Share this editor's pointer position (virtual canvas coordinates). */
 	setCursor(x: number, y: number): void;
 	/** Share this editor's current widget selection. */
@@ -59,6 +68,12 @@ export interface WorkspaceClient {
 	duplicateLayout(id: string, name: string): string | undefined;
 	archiveLayout(id: string): void;
 	activateLayout(id: string): void;
+	/** Enter draft mode: fork the live doc; edits stay private until publish. */
+	enterDraft(): void;
+	/** Merge the draft into live (broadcasts to the relay + overlay) and return to live. */
+	publish(): void;
+	/** Drop the draft and return to live, discarding its edits. */
+	discard(): void;
 	undo(): void;
 	redo(): void;
 	dispose(): void;
@@ -68,19 +83,27 @@ export function createWorkspaceClient(
 	url: string,
 	options: { identity?: PeerIdentity } = {}
 ): WorkspaceClient {
-	const doc = new LoroDoc();
+	const liveDoc = new LoroDoc();
 	let version = $state(0);
 
-	const unsubscribe = doc.subscribe(() => {
+	const liveUnsub = liveDoc.subscribe(() => {
 		version += 1;
 	});
 
+	// Draft state: a private fork of the live doc. While drafting, reads + writes target the
+	// fork; the live doc keeps syncing (peers + overlay see live). `mode` is client-only.
+	let mode = $state<EditorMode>('live');
+	let draft: Draft | undefined;
+	let draftUndo: UndoManager | undefined;
+	let draftUnsub = () => {};
+	const active = () => draft?.doc ?? liveDoc;
+
 	// Ephemeral presence (cursors, selections, identity), wired to the relay's presence
-	// channel. Disabled when there is no identity (local mode has no signed-in account).
+	// channel on the LIVE doc. Disabled when there is no identity (local mode has no account).
 	let presenceVersion = $state(0);
 	let presence: Presence | undefined;
 	let connectionState = $state<ConnectionState>('syncing');
-	const sync: SyncConnection = connectSync(doc, url, {
+	const sync: SyncConnection = connectSync(liveDoc, url, {
 		onPresence: (bytes) => presence?.apply(bytes),
 		onState: (state) => {
 			connectionState = state;
@@ -94,49 +117,58 @@ export function createWorkspaceClient(
 		});
 	}
 
-	// Local undo over THIS peer's edits only; remote merges + relay repairs are a
-	// different peer and never land on the stack. mergeInterval 0 keeps each commit
-	// its own undo step: a drag/add/delete commits exactly once, and discrete
-	// actions never merge (a time window would fold a scene activation into a later
-	// add, so one undo would revert both). Inspector typing is per-keystroke but
-	// predictable; debounced commits are a later refinement.
-	const undo = new UndoManager(doc, { mergeInterval: 0 });
+	// Local undo over THIS peer's edits only; remote merges + relay repairs are a different
+	// peer and never land on the stack. mergeInterval 0 keeps each commit its own undo step.
+	// A draft gets its own UndoManager so undo within a draft does not touch live history.
+	const liveUndo = new UndoManager(liveDoc, { mergeInterval: 0 });
+	const undoMgr = () => draftUndo ?? liveUndo;
 
-	function activeLayout() {
+	function activeLayout(doc: LoroDoc) {
 		const tree = doc.getTree(TREE);
 		const roots = tree.roots();
 		const activeLayoutId = String(doc.getMap(WORKSPACE).get('activeLayoutId') ?? '');
 		return roots.find((node) => String(node.id) === activeLayoutId) ?? roots[0];
 	}
 
-	// Run a mutation then commit (one undoable step) and return its result. Every
-	// write goes through this, so "forgot to commit" is structurally impossible.
-	const tx = <R>(run: () => R): R => {
-		const result = run();
+	// Run a mutation against the active doc then commit (one undoable step) and return its
+	// result. Every write goes through this, so "forgot to commit" is structurally impossible.
+	const tx = <R>(run: (doc: LoroDoc) => R): R => {
+		const doc = active();
+		const result = run(doc);
 		doc.commit();
 		return result;
 	};
 
+	function exitDraft() {
+		draftUnsub();
+		draftUnsub = () => {};
+		draftUndo?.free();
+		draftUndo = undefined;
+		draft = undefined;
+		mode = 'live';
+		version += 1; // re-read the live doc
+	}
+
 	return {
 		get scenes(): SceneView[] {
 			void version;
-			return readWorkspace(doc).scenes;
+			return readWorkspace(active()).scenes;
 		},
 		get activeSceneId(): string {
 			void version;
-			return readWorkspace(doc).activeSceneId;
+			return readWorkspace(active()).activeSceneId;
 		},
 		get workspace(): WorkspaceView {
 			void version;
-			return readWorkspace(doc);
+			return readWorkspace(active());
 		},
 		get canUndo(): boolean {
 			void version;
-			return undo.canUndo();
+			return undoMgr().canUndo();
 		},
 		get canRedo(): boolean {
 			void version;
-			return undo.canRedo();
+			return undoMgr().canRedo();
 		},
 		get remotePeers(): PeerPresence[] {
 			void presenceVersion;
@@ -145,90 +177,118 @@ export function createWorkspaceClient(
 		get connection(): ConnectionState {
 			return connectionState;
 		},
+		get mode(): EditorMode {
+			return mode;
+		},
 		setCursor(x, y) {
-			presence?.setCursor(x, y);
+			// A draft is private, so its cursor (on a divergent canvas) is not broadcast.
+			if (mode === 'live') presence?.setCursor(x, y);
 		},
 		setSelection(ids) {
-			presence?.setSelection(ids);
+			if (mode === 'live') presence?.setSelection(ids);
 		},
 		activate(sceneId: string) {
-			tx(() => {
-				const layout = activeLayout();
+			tx((doc) => {
+				const layout = activeLayout(doc);
 				if (layout) layout.data.set('activeSceneId', sceneId);
 			});
 		},
 		setWidgetGeometry(id, geom) {
-			tx(() => mutate.setWidgetGeometry(doc, id, geom));
+			tx((doc) => mutate.setWidgetGeometry(doc, id, geom));
 		},
 		setWidgetZ(id, z) {
-			tx(() => mutate.setWidgetZ(doc, id, z));
+			tx((doc) => mutate.setWidgetZ(doc, id, z));
 		},
 		setWidgetVisible(id, visible) {
-			tx(() => mutate.setWidgetVisible(doc, id, visible));
+			tx((doc) => mutate.setWidgetVisible(doc, id, visible));
 		},
 		setWidgetProp(id, key, value) {
-			tx(() => mutate.setWidgetProp(doc, id, key, value));
+			tx((doc) => mutate.setWidgetProp(doc, id, key, value));
 		},
 		createWidget(sceneId, widgetType, geom, props) {
-			return tx(() => mutate.createWidget(doc, sceneId, widgetType, geom, props));
+			return tx((doc) => mutate.createWidget(doc, sceneId, widgetType, geom, props));
 		},
 		deleteWidget(id) {
-			tx(() => mutate.deleteWidget(doc, id));
+			tx((doc) => mutate.deleteWidget(doc, id));
 		},
 		moveWidgetToScene(id, sceneId) {
-			tx(() => mutate.moveWidgetToScene(doc, id, sceneId));
+			tx((doc) => mutate.moveWidgetToScene(doc, id, sceneId));
 		},
 		setSceneTheme(sceneId, themeId) {
-			tx(() => mutate.setSceneTheme(doc, sceneId, themeId));
+			tx((doc) => mutate.setSceneTheme(doc, sceneId, themeId));
 		},
 		setSceneOverride(sceneId, key, value) {
-			tx(() => mutate.setSceneOverride(doc, sceneId, key, value));
+			tx((doc) => mutate.setSceneOverride(doc, sceneId, key, value));
 		},
 		createTheme(name, base, tokens) {
 			// Mint a unique id (never the name) so concurrent creates never collide.
 			const id = `theme-${crypto.randomUUID()}`;
-			tx(() => mutate.createTheme(doc, id, name, base, tokens));
+			tx((doc) => mutate.createTheme(doc, id, name, base, tokens));
 			return id;
 		},
 		renameTheme(id, name) {
-			tx(() => mutate.renameTheme(doc, id, name));
+			tx((doc) => mutate.renameTheme(doc, id, name));
 		},
 		setThemeToken(id, token, value) {
-			tx(() => mutate.setThemeToken(doc, id, token, value));
+			tx((doc) => mutate.setThemeToken(doc, id, token, value));
 		},
 		deleteTheme(id) {
-			tx(() => mutate.deleteTheme(doc, id));
+			tx((doc) => mutate.deleteTheme(doc, id));
 		},
 		exportTheme(id) {
-			return mutate.exportTheme(doc, id);
+			return mutate.exportTheme(active(), id);
 		},
 		createLayout(name) {
-			return tx(() => mutate.createLayout(doc, name));
+			return tx((doc) => mutate.createLayout(doc, name));
 		},
 		renameLayout(id, name) {
-			tx(() => mutate.renameLayout(doc, id, name));
+			tx((doc) => mutate.renameLayout(doc, id, name));
 		},
 		duplicateLayout(id, name) {
-			return tx(() => mutate.duplicateLayout(doc, id, name));
+			return tx((doc) => mutate.duplicateLayout(doc, id, name));
 		},
 		archiveLayout(id) {
-			tx(() => mutate.archiveLayout(doc, id));
+			tx((doc) => mutate.archiveLayout(doc, id));
 		},
 		activateLayout(id) {
-			tx(() => mutate.activateLayout(doc, id));
+			tx((doc) => mutate.activateLayout(doc, id));
+		},
+		enterDraft() {
+			if (mode === 'draft') return;
+			draft = beginDraft(liveDoc);
+			draftUndo = new UndoManager(draft.doc, { mergeInterval: 0 });
+			draftUnsub = draft.doc.subscribe(() => {
+				version += 1;
+			});
+			mode = 'draft';
+			version += 1;
+		},
+		publish() {
+			if (!draft) return;
+			// import() does not fire the live doc's local-update subscriber, so re-broadcast
+			// the published delta to the relay explicitly (it merges + forwards to peers).
+			const updates = publishDraft(liveDoc, draft);
+			sync.sendUpdate(updates);
+			exitDraft();
+		},
+		discard() {
+			if (!draft) return;
+			exitDraft();
 		},
 		undo() {
-			undo.undo();
+			undoMgr().undo();
 		},
 		redo() {
-			undo.redo();
+			undoMgr().redo();
 		},
 		dispose() {
+			draftUnsub();
+			draftUndo?.free();
 			presenceUnsub();
 			presence?.destroy();
-			unsubscribe();
+			liveUnsub();
 			sync.close();
-			undo.free();
+			liveUndo.free();
 		}
 	};
 }

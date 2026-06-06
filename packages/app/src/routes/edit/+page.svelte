@@ -204,7 +204,11 @@
 		else if (id === 'switch-theme') shell.openThemeEditor();
 		else if (id === 'fire-test-alert') editorBus.emit(testEventAt(testEventIndex++, Date.now()));
 		else if (id === 'open-layout') layoutMenuOpen = true;
-		// toggle-mode, use-in-obs: deferred to their own increments (live/draft, OBS).
+		else if (id === 'toggle-mode') {
+			if (workspace?.mode === 'draft') workspace.publish();
+			else workspace?.enterDraft();
+		}
+		// use-in-obs: deferred to its own increment (OBS).
 	}
 
 	// Editor keyboard shortcuts (client-only; never at module scope). The dispatch lives in
@@ -282,6 +286,10 @@
 		onOpenShare={selfIdentity ? openShare : undefined}
 		shareLive={collaboration?.shareLive ?? false}
 		{layoutNav}
+		mode={workspace?.mode ?? 'live'}
+		onEnterDraft={() => workspace?.enterDraft()}
+		onPublish={() => workspace?.publish()}
+		onDiscard={() => workspace?.discard()}
 	/>
 	<ToolRail activeToolId={shell.activeToolId} onSelect={(id) => shell.setActiveTool(id)} />
 
