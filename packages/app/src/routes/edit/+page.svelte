@@ -8,6 +8,7 @@
 	import { createWorkspaceClient, type WorkspaceClient } from '$lib/shared/crdt/client.svelte';
 	import type { PeerIdentity } from '$lib/shared/crdt/presence';
 	import SharePopover from '$lib/features/collaboration/ui/SharePopover.svelte';
+	import Toaster from '$lib/shared/ui/Toaster.svelte';
 	import {
 		createCollaboration,
 		type Collaboration
@@ -316,6 +317,8 @@
 		onCreateWatchLink={collaboration.createWatchLink}
 	/>
 {/if}
+
+<Toaster />
 
 <style>
 	.shell {
