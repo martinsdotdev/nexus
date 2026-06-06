@@ -56,5 +56,7 @@
 	"workspaces.error_name_required": "Name your workspace.",
 	"workspaces.error_name_too_long": "Keep the name under 60 characters.",
 	"workspaces.created": "Workspace created.",
-	"share.invite_sent": "Invite sent to {email}."
+	"share.invite_sent": "Invite sent to {email}.",
+	"theme.import_invalid": "That is not valid theme JSON.",
+	"theme.imported": "Theme imported."
 }

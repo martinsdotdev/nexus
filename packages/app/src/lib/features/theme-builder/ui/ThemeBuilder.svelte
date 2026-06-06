@@ -19,6 +19,8 @@
 		colorToOklch
 	} from '$lib/entities/theme';
 	import { Select, Collapsible, ColorField } from '$lib/shared/ui';
+	import { toast } from '$lib/shared/ui/toast';
+	import { m } from '$lib/paraglide/messages';
 
 	interface Props {
 		scene: SceneView | null;
@@ -47,6 +49,7 @@
 	const activeTheme = $derived(themes.find((theme) => theme.id === activeThemeId) ?? null);
 
 	let importText = $state('');
+	let importError = $state<string | null>(null);
 
 	const linkTarget = (tokens: ThemeTokens, token: string): string => {
 		const value = tokens[token];
@@ -106,8 +109,12 @@
 			const id = onCreateTheme(String(parsed.name ?? 'Imported'), base, tokens);
 			onSetSceneTheme(scene.id, id);
 			importText = '';
+			importError = null;
+			toast.success(m['theme.imported']());
 		} catch {
-			// Ignore invalid JSON; the textarea keeps its content for correction.
+			// Surface the failure instead of swallowing it; keep the text for correction.
+			importError = m['theme.import_invalid']();
+			toast.error(m['theme.import_invalid']());
 		}
 	}
 </script>
@@ -198,8 +205,14 @@
 			{/each}
 
 			<Collapsible title="Import">
-				<textarea bind:value={importText} rows="4" placeholder="Paste theme JSON"></textarea>
+				<textarea
+					bind:value={importText}
+					rows="4"
+					placeholder="Paste theme JSON"
+					oninput={() => (importError = null)}
+				></textarea>
 				<button class="ghost" onclick={importTheme}>Import as new theme</button>
+				{#if importError}<p class="import-error" role="alert">{importError}</p>{/if}
 			</Collapsible>
 		{:else}
 			<p class="hint">This scene's theme is not in the registry.</p>
@@ -307,6 +320,12 @@
 	textarea:focus-visible {
 		outline: none;
 		box-shadow: var(--focus-ring);
+	}
+
+	.import-error {
+		margin: var(--space-1) 0 0;
+		font-size: var(--text-xs);
+		color: var(--destructive);
 	}
 
 	.hint {

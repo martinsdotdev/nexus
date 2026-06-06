@@ -48,9 +48,24 @@
 			<div class="grid">
 				<NumberInput label="X" value={w.x} onChange={(v) => onSetGeometry(w.id, { x: v })} />
 				<NumberInput label="Y" value={w.y} onChange={(v) => onSetGeometry(w.id, { y: v })} />
-				<NumberInput label="W" value={w.w} onChange={(v) => onSetGeometry(w.id, { w: v })} />
-				<NumberInput label="H" value={w.h} onChange={(v) => onSetGeometry(w.id, { h: v })} />
-				<NumberInput label="Z" value={w.z} onChange={(v) => onSetGeometry(w.id, { z: v })} />
+				<NumberInput
+					label="W"
+					value={w.w}
+					onChange={(v) => onSetGeometry(w.id, { w: v })}
+					min={1}
+				/>
+				<NumberInput
+					label="H"
+					value={w.h}
+					onChange={(v) => onSetGeometry(w.id, { h: v })}
+					min={1}
+				/>
+				<NumberInput
+					label="Z"
+					value={w.z}
+					onChange={(v) => onSetGeometry(w.id, { z: v })}
+					min={0}
+				/>
 			</div>
 		</fieldset>
 

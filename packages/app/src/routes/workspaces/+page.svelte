@@ -85,7 +85,7 @@
 		{#if error}<p class="error" role="alert">{error}</p>{/if}
 
 		{#if workspaces === null}
-			<p class="muted">{m['workspaces.loading']()}</p>
+			<p class="muted" role="status" aria-live="polite">{m['workspaces.loading']()}</p>
 		{:else if workspaces.length === 0}
 			<p class="muted">{m['workspaces.empty']()}</p>
 		{:else}
