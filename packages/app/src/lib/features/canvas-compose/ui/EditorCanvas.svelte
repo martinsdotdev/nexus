@@ -8,7 +8,7 @@
 	import type { WidgetView, WorkspaceView } from '$lib/shared/crdt/workspace-view';
 	import { WIDGET_REGISTRY } from '$lib/entities/widget';
 	import { resolveThemeStyle } from '$lib/entities/theme';
-	import { createEventBus } from '$lib/shared/events/event-bus';
+	import { createEventBus, type EventBus } from '$lib/shared/events/event-bus';
 	import { clientToVirtual, fitScale, VIRTUAL_H, VIRTUAL_W } from '../model/geometry';
 	import { snapRect, type Guide, type Rect } from '../model/snap';
 	import { resizeRect, type ResizeHandle } from '../model/resize';
@@ -26,6 +26,8 @@
 		remotePeers?: PeerPresence[];
 		/** Report this editor's pointer position in virtual coordinates (throttled). */
 		onCursorMove?: (x: number, y: number) => void;
+		/** The bus the canvas widgets subscribe to; the page owns it so it can fire test events. */
+		bus?: EventBus;
 	}
 	let {
 		view,
@@ -33,10 +35,9 @@
 		onSelectWidget,
 		onCommitGeometry,
 		remotePeers = [],
-		onCursorMove
+		onCursorMove,
+		bus = createEventBus()
 	}: Props = $props();
-
-	const bus = createEventBus();
 
 	const scene = $derived(
 		view ? (view.scenes.find((s) => s.id === view.activeSceneId) ?? view.scenes[0] ?? null) : null

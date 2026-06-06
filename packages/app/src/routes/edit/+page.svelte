@@ -16,6 +16,8 @@
 	import { fetchSelf } from '$lib/shared/auth/me';
 	import { createEditorShortcuts } from './editor-shortcuts';
 	import EditorCanvas from '$lib/features/canvas-compose/ui/EditorCanvas.svelte';
+	import { createEventBus } from '$lib/shared/events/event-bus';
+	import { testEventAt } from '$lib/shared/events/test-events';
 	import Inspector from '$lib/features/inspector/ui/Inspector.svelte';
 	import ThemeBuilder from '$lib/features/theme-builder/ui/ThemeBuilder.svelte';
 	import {
@@ -123,6 +125,12 @@
 		workspace?.setSelection(id ? [id] : []);
 	});
 
+	// The editor's local event bus: the canvas widgets subscribe to it, and "Fire test event"
+	// publishes synthetic events so the alert / goal / now-playing widgets can be QA'd live
+	// without a platform connection. Cycles through the vocabulary on repeated fires.
+	const editorBus = createEventBus();
+	let testEventIndex = 0;
+
 	// The command palette's commands; runCommand dispatches by id.
 	const commands: CommandItem[] = [
 		{ id: 'add-widget', label: m['editor.command.add_widget']() },
@@ -157,8 +165,9 @@
 	function runCommand(id: string) {
 		if (id === 'add-widget') addWidget('stream-info');
 		else if (id === 'switch-theme') shell.openThemeEditor();
-		// toggle-mode, open-layout, use-in-obs, fire-test-alert: deferred to their own
-		// increments (live/draft, layout switching, OBS, real event sources).
+		else if (id === 'fire-test-alert') editorBus.emit(testEventAt(testEventIndex++, Date.now()));
+		// toggle-mode, open-layout, use-in-obs: deferred to their own increments
+		// (live/draft, layout switching, OBS).
 	}
 
 	// Editor keyboard shortcuts (client-only; never at module scope). The dispatch lives in
@@ -256,6 +265,7 @@
 		onCommitGeometry={(id, rect) => workspace?.setWidgetGeometry(id, rect)}
 		remotePeers={workspace?.remotePeers ?? []}
 		onCursorMove={(x, y) => workspace?.setCursor(x, y)}
+		bus={editorBus}
 	/>
 
 	<div class="dock dock-right">
