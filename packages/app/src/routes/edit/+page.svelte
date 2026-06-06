@@ -44,7 +44,11 @@
 
 	let workspace = $state<WorkspaceClient | null>(null);
 	$effect(() => {
-		const url = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/sync`;
+		// In cloud mode the workspace is chosen by the picker (/edit?workspace=<id>); local
+		// mode ignores it and serves its single workspace.
+		const workspaceId = new URLSearchParams(location.search).get('workspace');
+		const base = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/sync`;
+		const url = workspaceId ? `${base}?workspace=${encodeURIComponent(workspaceId)}` : base;
 		let client: WorkspaceClient | null = null;
 		let disposed = false;
 		void (async () => {

@@ -1,7 +1,7 @@
 <script lang="ts">
 	// The sign-in page: a centered auth card around the email-code form. Standalone (no
 	// editor chrome); the root layout supplies the global tokens and fonts. On a verified
-	// code the form establishes the session and we navigate into the editor.
+	// code the form establishes the session and we navigate to the workspace picker.
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { m } from '$lib/paraglide/messages';
@@ -17,7 +17,7 @@
 			<h1 class="title">{m['login.title']()}</h1>
 			<p class="subtitle">{m['login.subtitle']()}</p>
 		</header>
-		<LoginForm onAuthenticated={() => goto(resolve('/edit'))} />
+		<LoginForm onAuthenticated={() => goto(resolve('/workspaces'))} />
 	</section>
 </main>
 

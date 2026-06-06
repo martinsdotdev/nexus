@@ -41,5 +41,13 @@
 	"login.error_email": "Enter a valid email address.",
 	"login.error_code": "That code is not right. Check it and try again.",
 	"login.error_rate_limited": "Too many tries. Wait a minute, then try again.",
-	"login.error_network": "Could not reach the server. Try again."
+	"login.error_network": "Could not reach the server. Try again.",
+	"workspaces.title": "Your workspaces",
+	"workspaces.loading": "Loading…",
+	"workspaces.empty": "No workspaces yet. Create your first one.",
+	"workspaces.create": "New workspace",
+	"workspaces.creating": "Creating…",
+	"workspaces.default_name": "Untitled",
+	"workspaces.error_load": "Could not load your workspaces.",
+	"workspaces.error_network": "Could not reach the server. Try again."
 }
