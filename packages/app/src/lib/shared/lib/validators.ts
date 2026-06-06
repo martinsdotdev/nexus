@@ -15,3 +15,12 @@ const LOGIN_CODE = /^[A-Z2-9]{8}$/;
 export function loginCodeError(value: string): string | undefined {
 	return LOGIN_CODE.test(value.trim().toUpperCase()) ? undefined : m['login.code_format']();
 }
+
+const WORKSPACE_NAME_MAX = 60;
+
+export function workspaceNameError(value: string): string | undefined {
+	const trimmed = value.trim();
+	if (trimmed.length === 0) return m['workspaces.error_name_required']();
+	if (trimmed.length > WORKSPACE_NAME_MAX) return m['workspaces.error_name_too_long']();
+	return undefined;
+}

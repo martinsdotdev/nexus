@@ -8,6 +8,9 @@
 	import { Crown, ChevronDown, UserPlus, Link, Copy, Check, Shield, X } from 'lucide-svelte';
 	import type { Member, Role } from '../api/share';
 	import { peerColor } from '$lib/shared/lib/peer-color';
+	import { toast } from '$lib/shared/ui/toast';
+	import { emailError } from '$lib/shared/lib/validators';
+	import { m } from '$lib/paraglide/messages';
 
 	interface Props {
 		members: Member[];
@@ -57,15 +60,25 @@
 		return role === 'owner' ? 'Host' : role === 'editor' ? 'Can edit' : 'View only';
 	}
 
-	async function invite() {
+	async function invite(event?: SubmitEvent) {
+		event?.preventDefault();
+		if (inviting) return;
 		const email = inviteEmail.trim();
-		if (!email || inviting) return;
+		const invalid = emailError(email);
+		if (invalid) {
+			inviteMsg = invalid;
+			return;
+		}
 		inviting = true;
 		inviteMsg = null;
 		const error = await onInvite(email, inviteRole);
 		inviting = false;
-		if (error) inviteMsg = error;
-		else inviteEmail = '';
+		if (error) {
+			inviteMsg = error;
+		} else {
+			inviteEmail = '';
+			toast.success(m['share.invite_sent']({ email }));
+		}
 	}
 
 	function copyLink() {
@@ -136,26 +149,35 @@
 
 	{#if canManage}
 		<div class="section">
-			<div class="invite">
+			<form class="invite" onsubmit={invite}>
 				<input
 					class="invite-input"
 					type="email"
 					placeholder="Invite by email"
+					aria-label="Invite by email"
+					aria-invalid={inviteMsg ? 'true' : undefined}
 					bind:value={inviteEmail}
-					onkeydown={(e) => e.key === 'Enter' && invite()}
 				/>
 				<div class="seg">
-					<button class:on={inviteRole === 'editor'} onclick={() => (inviteRole = 'editor')}>
+					<button
+						type="button"
+						class:on={inviteRole === 'editor'}
+						onclick={() => (inviteRole = 'editor')}
+					>
 						Editor
 					</button>
-					<button class:on={inviteRole === 'viewer'} onclick={() => (inviteRole = 'viewer')}>
+					<button
+						type="button"
+						class:on={inviteRole === 'viewer'}
+						onclick={() => (inviteRole = 'viewer')}
+					>
 						Viewer
 					</button>
 				</div>
-				<button class="invite-btn" aria-label="Send invite" disabled={inviting} onclick={invite}>
+				<button class="invite-btn" type="submit" aria-label="Send invite" disabled={inviting}>
 					<UserPlus size={14} />
 				</button>
-			</div>
+			</form>
 			{#if inviteMsg}<p class="invite-msg" role="alert">{inviteMsg}</p>{/if}
 		</div>
 	{/if}

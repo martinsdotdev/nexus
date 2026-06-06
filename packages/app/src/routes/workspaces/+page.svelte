@@ -5,6 +5,11 @@
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { m } from '$lib/paraglide/messages';
+	import { createForm } from '@tanstack/svelte-form';
+	import Field from '$lib/shared/ui/Field.svelte';
+	import Toaster from '$lib/shared/ui/Toaster.svelte';
+	import { toast } from '$lib/shared/ui/toast';
+	import { workspaceNameError } from '$lib/shared/lib/validators';
 
 	interface Workspace {
 		id: string;
@@ -14,7 +19,6 @@
 
 	let workspaces = $state<Workspace[] | null>(null);
 	let error = $state<string | null>(null);
-	let creating = $state(false);
 
 	$effect(() => {
 		void load();
@@ -44,28 +48,29 @@
 		goto(`${resolve('/edit')}?workspace=${id}`);
 	}
 
-	async function create() {
-		error = null;
-		creating = true;
-		try {
-			const res = await fetch('/workspaces', {
-				method: 'POST',
-				headers: { 'content-type': 'application/json' },
-				credentials: 'include',
-				body: JSON.stringify({ name: m['workspaces.default_name']() })
-			});
-			if (res.ok) {
-				const { id } = (await res.json()) as { id: string };
-				openWorkspace(id);
-			} else {
-				error = m['workspaces.error_load']();
+	const nameForm = createForm(() => ({
+		defaultValues: { name: '' },
+		onSubmit: async ({ value }) => {
+			error = null;
+			try {
+				const res = await fetch('/workspaces', {
+					method: 'POST',
+					headers: { 'content-type': 'application/json' },
+					credentials: 'include',
+					body: JSON.stringify({ name: value.name.trim() })
+				});
+				if (res.ok) {
+					const { id } = (await res.json()) as { id: string };
+					toast.success(m['workspaces.created']());
+					openWorkspace(id);
+				} else {
+					toast.error(m['workspaces.error_load']());
+				}
+			} catch {
+				toast.error(m['workspaces.error_network']());
 			}
-		} catch {
-			error = m['workspaces.error_network']();
-		} finally {
-			creating = false;
 		}
-	}
+	}));
 </script>
 
 <svelte:head><title>{m['workspaces.title']()}</title></svelte:head>
@@ -96,11 +101,44 @@
 			</ul>
 		{/if}
 
-		<button class="create" onclick={create} disabled={creating}>
-			{creating ? m['workspaces.creating']() : m['workspaces.create']()}
-		</button>
+		<form
+			class="create-form"
+			onsubmit={(event) => {
+				event.preventDefault();
+				nameForm.handleSubmit();
+			}}
+		>
+			<nameForm.Field
+				name="name"
+				validators={{
+					onBlur: ({ value }) => workspaceNameError(value),
+					onSubmit: ({ value }) => workspaceNameError(value)
+				}}
+			>
+				{#snippet children(field)}
+					<Field
+						label={m['workspaces.name_label']()}
+						placeholder={m['workspaces.name_placeholder']()}
+						value={field.state.value}
+						oninput={(v) => field.handleChange(v)}
+						onblur={() => field.handleBlur()}
+						error={field.state.meta.errors[0]}
+						required
+					/>
+				{/snippet}
+			</nameForm.Field>
+			<nameForm.Subscribe selector={(state) => state.isSubmitting}>
+				{#snippet children(submitting)}
+					<button class="create" type="submit" disabled={submitting}>
+						{submitting ? m['workspaces.creating']() : m['workspaces.create']()}
+					</button>
+				{/snippet}
+			</nameForm.Subscribe>
+		</form>
 	</section>
 </main>
+
+<Toaster />
 
 <style>
 	.picker {
@@ -175,6 +213,12 @@
 		font-size: var(--text-xs);
 		color: var(--muted-foreground);
 		text-transform: capitalize;
+	}
+
+	.create-form {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-3);
 	}
 
 	.create {

@@ -50,5 +50,11 @@
 	"workspaces.creating": "Creating…",
 	"workspaces.default_name": "Untitled",
 	"workspaces.error_load": "Could not load your workspaces.",
-	"workspaces.error_network": "Could not reach the server. Try again."
+	"workspaces.error_network": "Could not reach the server. Try again.",
+	"workspaces.name_label": "Name a new workspace",
+	"workspaces.name_placeholder": "Stream overlays",
+	"workspaces.error_name_required": "Name your workspace.",
+	"workspaces.error_name_too_long": "Keep the name under 60 characters.",
+	"workspaces.created": "Workspace created.",
+	"share.invite_sent": "Invite sent to {email}."
 }
