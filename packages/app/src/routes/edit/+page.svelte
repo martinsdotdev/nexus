@@ -12,6 +12,8 @@
 		createCollaboration,
 		type Collaboration
 	} from '$lib/features/collaboration/model/collaboration.svelte';
+	import { fetchSelf } from '$lib/shared/auth/me';
+	import { createEditorShortcuts } from './editor-shortcuts';
 	import EditorCanvas from '$lib/features/canvas-compose/ui/EditorCanvas.svelte';
 	import Inspector from '$lib/features/inspector/ui/Inspector.svelte';
 	import ThemeBuilder from '$lib/features/theme-builder/ui/ThemeBuilder.svelte';
@@ -34,19 +36,6 @@
 		brb: m['editor.scene.brb'],
 		ending: m['editor.scene.ending']
 	};
-	// The signed-in account, used to stamp presence (cursors/selections). In local mode
-	// /auth/me is not a route, so this resolves to no identity and presence stays off.
-	async function fetchIdentity(): Promise<PeerIdentity | undefined> {
-		try {
-			const res = await fetch('/auth/me', { credentials: 'include' });
-			if (!res.ok) return undefined;
-			const me = (await res.json()) as { user_id: string; display: string };
-			return { id: me.user_id, name: me.display };
-		} catch {
-			return undefined;
-		}
-	}
-
 	let workspace = $state<WorkspaceClient | null>(null);
 	let selfIdentity = $state<PeerIdentity | undefined>(undefined);
 	let collaboration = $state<Collaboration | null>(null);
@@ -60,7 +49,7 @@
 		let client: WorkspaceClient | null = null;
 		let disposed = false;
 		void (async () => {
-			const identity = await fetchIdentity();
+			const identity = await fetchSelf();
 			if (disposed) return;
 			selfIdentity = identity;
 			client = createWorkspaceClient(url, { identity });
@@ -171,78 +160,14 @@
 		// increments (live/draft, layout switching, OBS, real event sources).
 	}
 
-	// Editor keyboard shortcuts (client-only; never at module scope). Cmd/Ctrl-K
-	// opens the palette; undo/redo + canvas shortcuts apply only when NOT typing in a
-	// field, so they never hijack text editing.
+	// Editor keyboard shortcuts (client-only; never at module scope). The dispatch lives in
+	// editor-shortcuts.ts; the handler reads the current workspace + active scene via getters.
 	$effect(() => {
-		const onKey = (event: KeyboardEvent) => {
-			const mod = event.metaKey || event.ctrlKey;
-			if (mod && event.key.toLowerCase() === 'k') {
-				event.preventDefault();
-				shell.togglePalette();
-				return;
-			}
-			const target = event.target as HTMLElement | null;
-			const typing =
-				!!target &&
-				(target.tagName === 'INPUT' ||
-					target.tagName === 'TEXTAREA' ||
-					target.tagName === 'SELECT' ||
-					target.isContentEditable);
-			if (typing || !workspace) return;
-
-			if (mod && event.key.toLowerCase() === 'z') {
-				event.preventDefault();
-				if (event.shiftKey) workspace.redo();
-				else workspace.undo();
-				return;
-			}
-			if (mod && event.key.toLowerCase() === 'y') {
-				event.preventDefault();
-				workspace.redo();
-				return;
-			}
-
-			const selected = shell.selectedWidgetId;
-			if ((event.key === 'Delete' || event.key === 'Backspace') && selected) {
-				event.preventDefault();
-				workspace.deleteWidget(selected);
-				shell.clearSelection();
-				return;
-			}
-			if (event.key === 'Escape') {
-				shell.clearSelection();
-				return;
-			}
-
-			const nudges: Record<string, [number, number]> = {
-				ArrowLeft: [-1, 0],
-				ArrowRight: [1, 0],
-				ArrowUp: [0, -1],
-				ArrowDown: [0, 1]
-			};
-			const nudge = nudges[event.key];
-			if (selected && nudge) {
-				event.preventDefault();
-				const widget = activeScene?.widgets.find((w) => w.id === selected);
-				if (widget) {
-					const step = event.shiftKey ? 10 : 1;
-					workspace.setWidgetGeometry(selected, {
-						x: widget.x + nudge[0] * step,
-						y: widget.y + nudge[1] * step
-					});
-				}
-				return;
-			}
-
-			if (['1', '2', '3', '4'].includes(event.key)) {
-				const scene = workspace.scenes[Number(event.key) - 1];
-				if (scene) {
-					event.preventDefault();
-					workspace.activate(scene.id);
-				}
-			}
-		};
+		const onKey = createEditorShortcuts(
+			shell,
+			() => workspace,
+			() => activeScene
+		);
 		window.addEventListener('keydown', onKey);
 		return () => window.removeEventListener('keydown', onKey);
 	});
