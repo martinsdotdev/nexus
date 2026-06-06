@@ -14,7 +14,7 @@ use uuid::Uuid;
 
 use crate::auth::routes::{CurrentUser, csrf_guard};
 use crate::http::AppState;
-use crate::persistence::WorkspaceId;
+use crate::workspaces::access::{WorkspaceEditor, WorkspaceMember, WorkspaceOwner};
 use crate::workspaces::store::Role;
 
 #[derive(Serialize)]
@@ -88,24 +88,10 @@ struct InviteMember {
 /// `POST /workspaces/:id/members`: invite an existing account by email (owner only).
 async fn invite_member(
     State(state): State<AppState>,
-    CurrentUser(user): CurrentUser,
-    Path(workspace_id): Path<Uuid>,
+    WorkspaceOwner { workspace }: WorkspaceOwner,
     Json(body): Json<InviteMember>,
 ) -> Result<StatusCode, StatusCode> {
     let cloud = state.cloud.as_ref().ok_or(StatusCode::NOT_FOUND)?;
-    let workspace = WorkspaceId(workspace_id);
-
-    // Only an owner may invite.
-    let role = cloud
-        .workspaces
-        .membership(user.id, workspace)
-        .await
-        .map_err(internal)?
-        .ok_or(StatusCode::FORBIDDEN)?;
-    if role != Role::Owner {
-        return Err(StatusCode::FORBIDDEN);
-    }
-
     let email = body.email.trim().to_lowercase();
     let invited_role = body.role.unwrap_or(Role::Editor);
     cloud
@@ -115,24 +101,6 @@ async fn invite_member(
         .map_err(internal)?
         .ok_or(StatusCode::NOT_FOUND)?; // no account with that email
     Ok(StatusCode::NO_CONTENT)
-}
-
-/// The caller must be the workspace owner, else 403 (which also covers non-members).
-async fn require_owner(
-    cloud: &crate::http::CloudAuth,
-    user_id: Uuid,
-    workspace: WorkspaceId,
-) -> Result<(), StatusCode> {
-    let role = cloud
-        .workspaces
-        .membership(user_id, workspace)
-        .await
-        .map_err(internal)?
-        .ok_or(StatusCode::FORBIDDEN)?;
-    if role != Role::Owner {
-        return Err(StatusCode::FORBIDDEN);
-    }
-    Ok(())
 }
 
 #[derive(Serialize)]
@@ -145,17 +113,9 @@ struct MemberItem {
 /// `GET /workspaces/:id/members`: everyone in the workspace (any member may read).
 async fn list_members(
     State(state): State<AppState>,
-    CurrentUser(user): CurrentUser,
-    Path(workspace_id): Path<Uuid>,
+    WorkspaceMember { workspace }: WorkspaceMember,
 ) -> Result<Json<Vec<MemberItem>>, StatusCode> {
     let cloud = state.cloud.as_ref().ok_or(StatusCode::NOT_FOUND)?;
-    let workspace = WorkspaceId(workspace_id);
-    cloud
-        .workspaces
-        .membership(user.id, workspace)
-        .await
-        .map_err(internal)?
-        .ok_or(StatusCode::FORBIDDEN)?;
     let members = cloud
         .workspaces
         .list_members(workspace)
@@ -182,13 +142,11 @@ struct SetRole {
 /// own seat is fixed, and no one is promoted to owner through this route.
 async fn set_member_role(
     State(state): State<AppState>,
-    CurrentUser(user): CurrentUser,
-    Path((workspace_id, target)): Path<(Uuid, Uuid)>,
+    WorkspaceOwner { workspace }: WorkspaceOwner,
+    Path((_, target)): Path<(Uuid, Uuid)>,
     Json(body): Json<SetRole>,
 ) -> Result<StatusCode, StatusCode> {
     let cloud = state.cloud.as_ref().ok_or(StatusCode::NOT_FOUND)?;
-    let workspace = WorkspaceId(workspace_id);
-    require_owner(cloud, user.id, workspace).await?;
     if body.role == Role::Owner {
         return Err(StatusCode::BAD_REQUEST);
     }
@@ -214,12 +172,10 @@ async fn set_member_role(
 /// be removed).
 async fn remove_member(
     State(state): State<AppState>,
-    CurrentUser(user): CurrentUser,
-    Path((workspace_id, target)): Path<(Uuid, Uuid)>,
+    WorkspaceOwner { workspace }: WorkspaceOwner,
+    Path((_, target)): Path<(Uuid, Uuid)>,
 ) -> Result<StatusCode, StatusCode> {
     let cloud = state.cloud.as_ref().ok_or(StatusCode::NOT_FOUND)?;
-    let workspace = WorkspaceId(workspace_id);
-    require_owner(cloud, user.id, workspace).await?;
     let current = cloud
         .workspaces
         .membership(target, workspace)
@@ -247,20 +203,9 @@ struct MintedToken {
 /// Viewers cannot create one.
 async fn mint_overlay_token(
     State(state): State<AppState>,
-    CurrentUser(user): CurrentUser,
-    Path(workspace_id): Path<Uuid>,
+    WorkspaceEditor { workspace }: WorkspaceEditor,
 ) -> Result<Json<MintedToken>, StatusCode> {
     let cloud = state.cloud.as_ref().ok_or(StatusCode::NOT_FOUND)?;
-    let workspace = WorkspaceId(workspace_id);
-    let role = cloud
-        .workspaces
-        .membership(user.id, workspace)
-        .await
-        .map_err(internal)?
-        .ok_or(StatusCode::FORBIDDEN)?;
-    if !role.can_write() {
-        return Err(StatusCode::FORBIDDEN);
-    }
     let token = cloud
         .overlay_tokens
         .mint(workspace)

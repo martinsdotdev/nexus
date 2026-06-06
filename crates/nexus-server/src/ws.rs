@@ -24,6 +24,7 @@ use crate::http::AppState;
 use crate::persistence::WorkspaceId;
 use crate::protocol::Frame;
 use crate::registry::WorkspaceRegistry;
+use crate::workspaces::access::resolve_membership;
 
 /// Process-wide unique id per connection, so a session can skip echoing its own
 /// presence back to itself.
@@ -100,12 +101,7 @@ async fn resolve_access(
         _ => return Err(StatusCode::UNAUTHORIZED),
     };
 
-    let role = cloud
-        .workspaces
-        .membership(user.id, workspace)
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
-        .ok_or(StatusCode::FORBIDDEN)?;
+    let role = resolve_membership(&cloud.workspaces, user.id, workspace).await?;
 
     Ok(Access {
         workspace,
