@@ -152,7 +152,7 @@
 						Viewer
 					</button>
 				</div>
-				<button class="invite-btn" disabled={inviting} onclick={invite}>
+				<button class="invite-btn" aria-label="Send invite" disabled={inviting} onclick={invite}>
 					<UserPlus size={14} />
 				</button>
 			</div>
