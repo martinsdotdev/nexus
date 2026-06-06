@@ -37,7 +37,7 @@ argon2 = "0.5"
 # only in cloud mode (NEXUS_DATABASE_URL set); local file mode does not build a pool.
 sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio", "tls-rustls", "postgres", "macros", "migrate", "uuid", "chrono"] }
 axum-extra = { version = "0.10", features = ["cookie"] }
-uuid = { version = "1", features = ["v4"] }
+uuid = { version = "1", features = ["v4", "serde"] }
 chrono = "0.4"
 # `time::Duration` for cookie max-age (the type the cookie crate's builder expects).
 time = { version = "0.3", default-features = false }

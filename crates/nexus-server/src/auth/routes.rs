@@ -56,7 +56,7 @@ impl FromRequestParts<AppState> for CurrentUser {
 /// same-origin per `Sec-Fetch-Site`. The cookie's `SameSite=Lax` is the first layer;
 /// this server-side check is the second. (An `Origin`-whitelist fallback for older
 /// browsers is a later refinement.)
-async fn csrf_guard(req: Request, next: Next) -> Result<Response, StatusCode> {
+pub(crate) async fn csrf_guard(req: Request, next: Next) -> Result<Response, StatusCode> {
     let safe = matches!(req.method().as_str(), "GET" | "HEAD" | "OPTIONS");
     if !safe {
         let same_origin = req

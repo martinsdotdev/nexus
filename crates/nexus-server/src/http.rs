@@ -45,7 +45,9 @@ pub fn build_app(state: AppState, static_dir: Option<PathBuf>) -> Router {
     let mut app = Router::new().route("/sync", get(sync_handler));
 
     if state.cloud.is_some() {
-        app = app.merge(crate::auth::routes::router());
+        app = app
+            .merge(crate::auth::routes::router())
+            .merge(crate::workspaces::routes::router());
     }
 
     if let Some(dir) = static_dir {

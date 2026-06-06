@@ -11,8 +11,9 @@ use crate::persistence::WorkspaceId;
 
 /// A member's role in a workspace (ADR-0009). Maps to the Postgres `workspace_role`
 /// enum; an aggregate with three gated states is a discriminated union (rule #6).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, sqlx::Type)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, sqlx::Type, serde::Serialize, serde::Deserialize)]
 #[sqlx(type_name = "workspace_role", rename_all = "lowercase")]
+#[serde(rename_all = "lowercase")]
 pub enum Role {
     Owner,
     Editor,
@@ -100,6 +101,35 @@ impl WorkspaceStore {
                 role,
             })
             .collect())
+    }
+
+    /// Add (or re-role) the account that owns `email` as a member of `workspace`.
+    /// Returns `None` if no account has that email (the invitee must have signed in at
+    /// least once); the caller maps that to a 404.
+    pub async fn add_member_by_email(
+        &self,
+        workspace: WorkspaceId,
+        email: &str,
+        role: Role,
+    ) -> sqlx::Result<Option<()>> {
+        let row: Option<(Uuid,)> =
+            sqlx::query_as("select user_id from email_identity where email = $1")
+                .bind(email)
+                .fetch_optional(&self.pool)
+                .await?;
+        let Some((user_id,)) = row else {
+            return Ok(None);
+        };
+        sqlx::query(
+            "insert into membership (workspace_id, user_id, role) values ($1, $2, $3) \
+             on conflict (workspace_id, user_id) do update set role = $3",
+        )
+        .bind(workspace.0)
+        .bind(user_id)
+        .bind(role)
+        .execute(&self.pool)
+        .await?;
+        Ok(Some(()))
     }
 }
 

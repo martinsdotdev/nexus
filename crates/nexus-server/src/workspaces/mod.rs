@@ -1,11 +1,10 @@
-//! Workspaces + memberships (ADR-0009): the cloud-mode data layer the `/sync` gate
-//! and the workspace HTTP routes consume. Unused in production until the gate lands
-//! in the next increment, so the store is allowed to read as dead code until then.
+//! Workspaces + memberships (ADR-0009): the data layer (`store`) and the cloud-mode HTTP
+//! routes for listing, creating, and inviting to workspaces (`routes`), plus the overlay
+//! read-only token (`overlay_token`; its `mint`/`revoke` have no route yet, so it is
+//! allowed to read as dead code until an overlay-token management UI lands).
 
-#[allow(dead_code)]
+pub mod routes;
 pub mod store;
 
-// Overlay read-only tokens. `validate` backs the `/sync?token=` path; `mint`/`revoke`
-// have no production caller until the workspace HTTP routes land, so allow until then.
 #[allow(dead_code)]
 pub mod overlay_token;

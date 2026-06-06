@@ -33,3 +33,4 @@ serde.workspace = true
 [dev-dependencies]
 testcontainers-modules.workspace = true
 tower.workspace = true
+serde_json.workspace = true
