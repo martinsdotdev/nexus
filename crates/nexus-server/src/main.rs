@@ -47,6 +47,24 @@ async fn main() -> anyhow::Result<()> {
                         let pool = sqlx::PgPool::connect(url).await?;
                         sqlx::migrate!("./migrations").run(&pool).await?;
                         tracing::info!("cloud mode: Postgres connected, migrations applied");
+
+                        // R5 bootstrap: on the first cloud boot, import the pre-cloud local
+                        // document (still on the volume as `workspace.loro`, if any) into one
+                        // unclaimed workspace the first sign-in will own. A no-op thereafter.
+                        let workspaces = workspaces::store::WorkspaceStore::new(pool.clone());
+                        let existing = std::fs::read(data_dir.join("workspace.loro")).ok();
+                        match workspaces
+                            .bootstrap_unclaimed("My Overlays", existing.as_deref())
+                            .await?
+                        {
+                            Some(id) => {
+                                tracing::info!(%id, "R5 bootstrap: imported the existing workspace (unclaimed)")
+                            }
+                            None => {
+                                tracing::debug!("R5 bootstrap: skipped, a workspace already exists")
+                            }
+                        }
+
                         let cloud = http::CloudAuth {
                             sessions: auth::session::SessionStore::new(pool.clone()),
                             emails: auth::email::EmailStore::new(pool.clone()),
@@ -54,7 +72,7 @@ async fn main() -> anyhow::Result<()> {
                                 Some(path) => auth::email_sender::EmailSender::File(path.clone()),
                                 None => auth::email_sender::EmailSender::Log,
                             },
-                            workspaces: workspaces::store::WorkspaceStore::new(pool.clone()),
+                            workspaces,
                             overlay_tokens: workspaces::overlay_token::OverlayTokenStore::new(
                                 pool.clone(),
                             ),

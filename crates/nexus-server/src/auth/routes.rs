@@ -165,6 +165,12 @@ async fn post_email_verify(
     {
         VerifyOutcome::Verified(user_id) => {
             let session = cloud.sessions.create(user_id).await.map_err(internal)?;
+            // First sign-in claims the bootstrapped workspace (ADR-0009 R5). Best-effort:
+            // a failure must not block login, so it is logged and ignored (the workspace
+            // simply stays unclaimed for the next sign-in).
+            if let Err(err) = cloud.workspaces.claim_unclaimed_for(user_id).await {
+                tracing::warn!(%err, "claiming the bootstrapped workspace failed");
+            }
             let jar = jar
                 .add(session_cookie(session.token))
                 .remove(clear_cookie(EMAIL_COOKIE));

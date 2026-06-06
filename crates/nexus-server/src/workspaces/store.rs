@@ -9,6 +9,10 @@ use uuid::Uuid;
 
 use crate::persistence::WorkspaceId;
 
+/// Postgres advisory-lock key serializing the one-time R5 bootstrap across concurrent
+/// boots (an arbitrary fixed constant, "nxbs" in ASCII).
+const BOOTSTRAP_LOCK: i64 = 0x6e78_6273;
+
 /// A member's role in a workspace (ADR-0009). Maps to the Postgres `workspace_role`
 /// enum; an aggregate with three gated states is a discriminated union (rule #6).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, sqlx::Type, serde::Serialize, serde::Deserialize)]
@@ -101,6 +105,63 @@ impl WorkspaceStore {
                 role,
             })
             .collect())
+    }
+
+    /// One-time bootstrap (ADR-0009 R5): when no workspace exists yet, create a single
+    /// unclaimed one (a row with no memberships) seeded with `snapshot`, the pre-cloud
+    /// local document if the volume still has one. Returns the new id, or `None` if a
+    /// workspace already exists (so it runs only on the first cloud boot). A transaction
+    /// advisory lock serializes concurrent boots (e.g. a rolling deploy) so exactly one
+    /// bootstrap row is ever made. The first user to sign in claims it (`claim_unclaimed_for`).
+    pub async fn bootstrap_unclaimed(
+        &self,
+        name: &str,
+        snapshot: Option<&[u8]>,
+    ) -> sqlx::Result<Option<WorkspaceId>> {
+        let mut tx = self.pool.begin().await?;
+        sqlx::query("select pg_advisory_xact_lock($1)")
+            .bind(BOOTSTRAP_LOCK)
+            .execute(&mut *tx)
+            .await?;
+        let already: bool = sqlx::query_scalar("select exists(select 1 from workspace)")
+            .fetch_one(&mut *tx)
+            .await?;
+        if already {
+            return Ok(None); // tx rolls back on drop, releasing the lock
+        }
+        let id = Uuid::new_v4();
+        sqlx::query("insert into workspace (id, name, snapshot) values ($1, $2, $3)")
+            .bind(id)
+            .bind(name)
+            .bind(snapshot)
+            .execute(&mut *tx)
+            .await?;
+        tx.commit().await?;
+        Ok(Some(WorkspaceId(id)))
+    }
+
+    /// "First sign-in claims it" (ADR-0009 R5): atomically make `user_id` the owner of the
+    /// oldest unclaimed workspace (a bootstrap row with no memberships), if one exists.
+    /// Returns the claimed id, or `None` when nothing is unclaimed. Idempotent across logins
+    /// and race-safe: the row is locked `for update skip locked`, so under a simultaneous
+    /// second login the loser's CTE is empty and it claims nothing.
+    pub async fn claim_unclaimed_for(&self, user_id: Uuid) -> sqlx::Result<Option<WorkspaceId>> {
+        let row: Option<(Uuid,)> = sqlx::query_as(
+            "with unclaimed as ( \
+                 select w.id from workspace w \
+                 where not exists (select 1 from membership m where m.workspace_id = w.id) \
+                 order by w.created_at \
+                 limit 1 \
+                 for update skip locked \
+             ) \
+             insert into membership (workspace_id, user_id, role) \
+             select id, $1, 'owner' from unclaimed \
+             returning workspace_id",
+        )
+        .bind(user_id)
+        .fetch_optional(&self.pool)
+        .await?;
+        Ok(row.map(|(id,)| WorkspaceId(id)))
     }
 
     /// Add (or re-role) the account that owns `email` as a member of `workspace`.
@@ -227,5 +288,102 @@ mod tests {
                 .unwrap();
             assert_eq!(store.membership(member, ws).await.unwrap(), Some(role));
         }
+    }
+
+    #[tokio::test]
+    async fn bootstrap_creates_one_unclaimed_workspace_with_the_snapshot() {
+        let (_c, pool) = fresh_db().await;
+        let store = WorkspaceStore::new(pool.clone());
+
+        let id = store
+            .bootstrap_unclaimed("My Overlays", Some(&[1, 2, 3]))
+            .await
+            .unwrap()
+            .expect("a workspace was created");
+
+        // The snapshot is preserved, and the row has no memberships (it is unclaimed).
+        let snapshot: Option<Vec<u8>> =
+            sqlx::query_scalar("select snapshot from workspace where id = $1")
+                .bind(id.0)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(snapshot, Some(vec![1, 2, 3]));
+        let members: i64 =
+            sqlx::query_scalar("select count(*) from membership where workspace_id = $1")
+                .bind(id.0)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(members, 0, "the bootstrap workspace starts unclaimed");
+    }
+
+    #[tokio::test]
+    async fn bootstrap_is_a_no_op_once_a_workspace_exists() {
+        let (_c, pool) = fresh_db().await;
+        let store = WorkspaceStore::new(pool.clone());
+        let user = seed_user(&pool).await;
+        store.create_with_owner(user, "Existing").await.unwrap();
+
+        assert_eq!(
+            store
+                .bootstrap_unclaimed("My Overlays", None)
+                .await
+                .unwrap(),
+            None,
+            "no bootstrap when a workspace already exists"
+        );
+        let count: i64 = sqlx::query_scalar("select count(*) from workspace")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(count, 1);
+    }
+
+    #[tokio::test]
+    async fn the_first_caller_claims_the_bootstrapped_workspace_as_owner() {
+        let (_c, pool) = fresh_db().await;
+        let store = WorkspaceStore::new(pool.clone());
+        let id = store.bootstrap_unclaimed("W", None).await.unwrap().unwrap();
+        let user = seed_user(&pool).await;
+
+        assert_eq!(store.claim_unclaimed_for(user).await.unwrap(), Some(id));
+        assert_eq!(store.membership(user, id).await.unwrap(), Some(Role::Owner));
+    }
+
+    #[tokio::test]
+    async fn claim_is_a_no_op_when_nothing_is_unclaimed() {
+        let (_c, pool) = fresh_db().await;
+        let store = WorkspaceStore::new(pool.clone());
+        let user = seed_user(&pool).await;
+
+        // Nothing bootstrapped yet.
+        assert_eq!(store.claim_unclaimed_for(user).await.unwrap(), None);
+
+        // An owned workspace is not claimable by a stranger.
+        store.create_with_owner(user, "Owned").await.unwrap();
+        let stranger = seed_user(&pool).await;
+        assert_eq!(store.claim_unclaimed_for(stranger).await.unwrap(), None);
+    }
+
+    #[tokio::test]
+    async fn only_the_first_caller_claims_the_workspace() {
+        let (_c, pool) = fresh_db().await;
+        let store = WorkspaceStore::new(pool.clone());
+        let id = store.bootstrap_unclaimed("W", None).await.unwrap().unwrap();
+        let first = seed_user(&pool).await;
+        let second = seed_user(&pool).await;
+
+        assert_eq!(store.claim_unclaimed_for(first).await.unwrap(), Some(id));
+        assert_eq!(
+            store.claim_unclaimed_for(second).await.unwrap(),
+            None,
+            "the workspace is already claimed"
+        );
+        assert_eq!(
+            store.membership(first, id).await.unwrap(),
+            Some(Role::Owner)
+        );
+        assert_eq!(store.membership(second, id).await.unwrap(), None);
     }
 }

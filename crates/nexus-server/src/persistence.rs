@@ -24,6 +24,12 @@ impl WorkspaceId {
     pub const LOCAL: WorkspaceId = WorkspaceId(Uuid::nil());
 }
 
+impl std::fmt::Display for WorkspaceId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
 /// Loads and saves a workspace's Loro snapshot. Implementations: `FilePersistence`
 /// (local) and, in cloud mode, a Postgres-backed store.
 #[async_trait::async_trait]
