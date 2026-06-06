@@ -39,6 +39,15 @@ pub struct WorkspaceSummary {
     pub role: Role,
 }
 
+/// A member of a workspace, for the share panel's people list.
+#[derive(Debug, PartialEq, Eq)]
+pub struct Member {
+    pub user_id: Uuid,
+    /// The display handle (email local-part), as in `/auth/me`.
+    pub display: String,
+    pub role: Role,
+}
+
 /// Postgres-backed workspace + membership store. Cheap to clone (the pool is
 /// reference-counted).
 #[derive(Clone)]
@@ -192,6 +201,61 @@ impl WorkspaceStore {
         .await?;
         Ok(Some(()))
     }
+
+    /// Everyone in `workspace`, oldest membership first (so the owner leads), with their
+    /// display handle (email local-part) and role. Backs the share panel's people list.
+    pub async fn list_members(&self, workspace: WorkspaceId) -> sqlx::Result<Vec<Member>> {
+        let rows: Vec<(Uuid, String, Role)> = sqlx::query_as(
+            "select m.user_id, split_part(e.email, '@', 1) as display, m.role \
+             from membership m \
+             join email_identity e on e.user_id = m.user_id \
+             where m.workspace_id = $1 \
+             order by m.created_at",
+        )
+        .bind(workspace.0)
+        .fetch_all(&self.pool)
+        .await?;
+        Ok(rows
+            .into_iter()
+            .map(|(user_id, display, role)| Member {
+                user_id,
+                display,
+                role,
+            })
+            .collect())
+    }
+
+    /// Change a member's role. Returns `None` if they are not a member (the caller maps
+    /// that to a 404).
+    pub async fn set_member_role(
+        &self,
+        workspace: WorkspaceId,
+        user_id: Uuid,
+        role: Role,
+    ) -> sqlx::Result<Option<()>> {
+        let done =
+            sqlx::query("update membership set role = $1 where workspace_id = $2 and user_id = $3")
+                .bind(role)
+                .bind(workspace.0)
+                .bind(user_id)
+                .execute(&self.pool)
+                .await?;
+        Ok((done.rows_affected() > 0).then_some(()))
+    }
+
+    /// Remove a member from a workspace. Returns `None` if they were not a member (→ 404).
+    pub async fn remove_member(
+        &self,
+        workspace: WorkspaceId,
+        user_id: Uuid,
+    ) -> sqlx::Result<Option<()>> {
+        let done = sqlx::query("delete from membership where workspace_id = $1 and user_id = $2")
+            .bind(workspace.0)
+            .bind(user_id)
+            .execute(&self.pool)
+            .await?;
+        Ok((done.rows_affected() > 0).then_some(()))
+    }
 }
 
 #[cfg(test)]
@@ -223,6 +287,17 @@ mod tests {
             .execute(pool)
             .await
             .expect("seed user");
+        id
+    }
+
+    async fn seed_user_with_email(pool: &PgPool, email: &str) -> Uuid {
+        let id = seed_user(pool).await;
+        sqlx::query("insert into email_identity (email, user_id) values ($1, $2)")
+            .bind(email)
+            .bind(id)
+            .execute(pool)
+            .await
+            .expect("seed email");
         id
     }
 
@@ -385,5 +460,85 @@ mod tests {
             Some(Role::Owner)
         );
         assert_eq!(store.membership(second, id).await.unwrap(), None);
+    }
+
+    #[tokio::test]
+    async fn list_members_returns_each_member_with_their_handle() {
+        let (_c, pool) = fresh_db().await;
+        let store = WorkspaceStore::new(pool.clone());
+        let owner = seed_user_with_email(&pool, "mara@example.com").await;
+        let ws = store.create_with_owner(owner, "W").await.unwrap();
+        seed_user_with_email(&pool, "dub@example.com").await;
+        store
+            .add_member_by_email(ws, "dub@example.com", Role::Editor)
+            .await
+            .unwrap();
+
+        let members = store.list_members(ws).await.unwrap();
+        assert_eq!(members.len(), 2);
+        // The owner leads (oldest membership), shown by their email local-part.
+        assert_eq!(
+            members[0],
+            Member {
+                user_id: owner,
+                display: "mara".into(),
+                role: Role::Owner,
+            }
+        );
+        assert!(
+            members
+                .iter()
+                .any(|m| m.display == "dub" && m.role == Role::Editor)
+        );
+    }
+
+    #[tokio::test]
+    async fn set_member_role_updates_or_reports_missing() {
+        let (_c, pool) = fresh_db().await;
+        let store = WorkspaceStore::new(pool.clone());
+        let owner = seed_user(&pool).await;
+        let ws = store.create_with_owner(owner, "W").await.unwrap();
+        let member = seed_user_with_email(&pool, "e@example.com").await;
+        store
+            .add_member_by_email(ws, "e@example.com", Role::Editor)
+            .await
+            .unwrap();
+
+        assert_eq!(
+            store
+                .set_member_role(ws, member, Role::Viewer)
+                .await
+                .unwrap(),
+            Some(())
+        );
+        assert_eq!(
+            store.membership(member, ws).await.unwrap(),
+            Some(Role::Viewer)
+        );
+        let stranger = seed_user(&pool).await;
+        assert_eq!(
+            store
+                .set_member_role(ws, stranger, Role::Viewer)
+                .await
+                .unwrap(),
+            None
+        );
+    }
+
+    #[tokio::test]
+    async fn remove_member_deletes_or_reports_missing() {
+        let (_c, pool) = fresh_db().await;
+        let store = WorkspaceStore::new(pool.clone());
+        let owner = seed_user(&pool).await;
+        let ws = store.create_with_owner(owner, "W").await.unwrap();
+        let member = seed_user_with_email(&pool, "e@example.com").await;
+        store
+            .add_member_by_email(ws, "e@example.com", Role::Editor)
+            .await
+            .unwrap();
+
+        assert_eq!(store.remove_member(ws, member).await.unwrap(), Some(()));
+        assert_eq!(store.membership(member, ws).await.unwrap(), None);
+        assert_eq!(store.remove_member(ws, member).await.unwrap(), None);
     }
 }

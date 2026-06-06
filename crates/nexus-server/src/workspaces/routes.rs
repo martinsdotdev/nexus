@@ -1,14 +1,14 @@
-//! Cloud-mode workspace management routes (ADR-0009): list the caller's workspaces,
-//! create one (the caller becomes owner), and invite a member by email (owner only).
-//! Mounted by `http::build_app` in cloud mode, behind the same CSRF guard as the auth
-//! routes. Overlay-token management routes are a later refinement.
+//! Cloud-mode workspace management routes (ADR-0009): list the caller's workspaces, create
+//! one (the caller becomes owner), list members, invite/remove members and change roles
+//! (owner only), and mint a read-only overlay watch link (owner or editor). Mounted by
+//! `http::build_app` in cloud mode, behind the same CSRF guard as the auth routes.
 
 use axum::Router;
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use axum::middleware;
 use axum::response::Json;
-use axum::routing::{get, post};
+use axum::routing::{get, post, put};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -117,6 +117,158 @@ async fn invite_member(
     Ok(StatusCode::NO_CONTENT)
 }
 
+/// The caller must be the workspace owner, else 403 (which also covers non-members).
+async fn require_owner(
+    cloud: &crate::http::CloudAuth,
+    user_id: Uuid,
+    workspace: WorkspaceId,
+) -> Result<(), StatusCode> {
+    let role = cloud
+        .workspaces
+        .membership(user_id, workspace)
+        .await
+        .map_err(internal)?
+        .ok_or(StatusCode::FORBIDDEN)?;
+    if role != Role::Owner {
+        return Err(StatusCode::FORBIDDEN);
+    }
+    Ok(())
+}
+
+#[derive(Serialize)]
+struct MemberItem {
+    user_id: String,
+    display: String,
+    role: Role,
+}
+
+/// `GET /workspaces/:id/members`: everyone in the workspace (any member may read).
+async fn list_members(
+    State(state): State<AppState>,
+    CurrentUser(user): CurrentUser,
+    Path(workspace_id): Path<Uuid>,
+) -> Result<Json<Vec<MemberItem>>, StatusCode> {
+    let cloud = state.cloud.as_ref().ok_or(StatusCode::NOT_FOUND)?;
+    let workspace = WorkspaceId(workspace_id);
+    cloud
+        .workspaces
+        .membership(user.id, workspace)
+        .await
+        .map_err(internal)?
+        .ok_or(StatusCode::FORBIDDEN)?;
+    let members = cloud
+        .workspaces
+        .list_members(workspace)
+        .await
+        .map_err(internal)?;
+    Ok(Json(
+        members
+            .into_iter()
+            .map(|m| MemberItem {
+                user_id: m.user_id.to_string(),
+                display: m.display,
+                role: m.role,
+            })
+            .collect(),
+    ))
+}
+
+#[derive(Deserialize)]
+struct SetRole {
+    role: Role,
+}
+
+/// `PUT /workspaces/:id/members/:user`: change a member's role (owner only). The owner's
+/// own seat is fixed, and no one is promoted to owner through this route.
+async fn set_member_role(
+    State(state): State<AppState>,
+    CurrentUser(user): CurrentUser,
+    Path((workspace_id, target)): Path<(Uuid, Uuid)>,
+    Json(body): Json<SetRole>,
+) -> Result<StatusCode, StatusCode> {
+    let cloud = state.cloud.as_ref().ok_or(StatusCode::NOT_FOUND)?;
+    let workspace = WorkspaceId(workspace_id);
+    require_owner(cloud, user.id, workspace).await?;
+    if body.role == Role::Owner {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+    let current = cloud
+        .workspaces
+        .membership(target, workspace)
+        .await
+        .map_err(internal)?
+        .ok_or(StatusCode::NOT_FOUND)?;
+    if current == Role::Owner {
+        return Err(StatusCode::FORBIDDEN); // the owner's role is fixed
+    }
+    cloud
+        .workspaces
+        .set_member_role(workspace, target, body.role)
+        .await
+        .map_err(internal)?
+        .ok_or(StatusCode::NOT_FOUND)?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+/// `DELETE /workspaces/:id/members/:user`: remove a member (owner only; the owner cannot
+/// be removed).
+async fn remove_member(
+    State(state): State<AppState>,
+    CurrentUser(user): CurrentUser,
+    Path((workspace_id, target)): Path<(Uuid, Uuid)>,
+) -> Result<StatusCode, StatusCode> {
+    let cloud = state.cloud.as_ref().ok_or(StatusCode::NOT_FOUND)?;
+    let workspace = WorkspaceId(workspace_id);
+    require_owner(cloud, user.id, workspace).await?;
+    let current = cloud
+        .workspaces
+        .membership(target, workspace)
+        .await
+        .map_err(internal)?
+        .ok_or(StatusCode::NOT_FOUND)?;
+    if current == Role::Owner {
+        return Err(StatusCode::FORBIDDEN);
+    }
+    cloud
+        .workspaces
+        .remove_member(workspace, target)
+        .await
+        .map_err(internal)?
+        .ok_or(StatusCode::NOT_FOUND)?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+#[derive(Serialize)]
+struct MintedToken {
+    token: String,
+}
+
+/// `POST /workspaces/:id/overlay-token`: mint a read-only watch link (owner or editor).
+/// Viewers cannot create one.
+async fn mint_overlay_token(
+    State(state): State<AppState>,
+    CurrentUser(user): CurrentUser,
+    Path(workspace_id): Path<Uuid>,
+) -> Result<Json<MintedToken>, StatusCode> {
+    let cloud = state.cloud.as_ref().ok_or(StatusCode::NOT_FOUND)?;
+    let workspace = WorkspaceId(workspace_id);
+    let role = cloud
+        .workspaces
+        .membership(user.id, workspace)
+        .await
+        .map_err(internal)?
+        .ok_or(StatusCode::FORBIDDEN)?;
+    if !role.can_write() {
+        return Err(StatusCode::FORBIDDEN);
+    }
+    let token = cloud
+        .overlay_tokens
+        .mint(workspace)
+        .await
+        .map_err(internal)?;
+    Ok(Json(MintedToken { token }))
+}
+
 fn internal<E: std::fmt::Display>(err: E) -> StatusCode {
     tracing::error!("workspace route error: {err}");
     StatusCode::INTERNAL_SERVER_ERROR
@@ -126,7 +278,15 @@ fn internal<E: std::fmt::Display>(err: E) -> StatusCode {
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/workspaces", get(list_workspaces).post(create_workspace))
-        .route("/workspaces/{id}/members", post(invite_member))
+        .route(
+            "/workspaces/{id}/members",
+            get(list_members).post(invite_member),
+        )
+        .route(
+            "/workspaces/{id}/members/{user}",
+            put(set_member_role).delete(remove_member),
+        )
+        .route("/workspaces/{id}/overlay-token", post(mint_overlay_token))
         .layer(middleware::from_fn(csrf_guard))
 }
 
@@ -176,13 +336,18 @@ mod tests {
         (container, tmp, state, pool)
     }
 
-    async fn seed_user_with_email(pool: &PgPool, email: &str) -> Uuid {
+    async fn seed_user(pool: &PgPool) -> Uuid {
         let id = Uuid::new_v4();
         sqlx::query("insert into app_user (id) values ($1)")
             .bind(id)
             .execute(pool)
             .await
             .unwrap();
+        id
+    }
+
+    async fn seed_user_with_email(pool: &PgPool, email: &str) -> Uuid {
+        let id = seed_user(pool).await;
         sqlx::query("insert into email_identity (email, user_id) values ($1, $2)")
             .bind(email)
             .bind(id)
@@ -193,13 +358,25 @@ mod tests {
     }
 
     fn post(uri: &str, cookie: &str, body: &str) -> Request<Body> {
+        req("POST", uri, cookie, body)
+    }
+
+    fn req(method: &str, uri: &str, cookie: &str, body: &str) -> Request<Body> {
         Request::builder()
-            .method("POST")
+            .method(method)
             .uri(uri)
             .header("content-type", "application/json")
             .header("sec-fetch-site", "same-origin")
             .header("cookie", format!("nexus_session={cookie}"))
             .body(Body::from(body.to_string()))
+            .unwrap()
+    }
+
+    fn get_req(uri: &str, cookie: &str) -> Request<Body> {
+        Request::builder()
+            .uri(uri)
+            .header("cookie", format!("nexus_session={cookie}"))
+            .body(Body::empty())
             .unwrap()
     }
 
@@ -286,6 +463,129 @@ mod tests {
                 &format!("/workspaces/{}/members", ws.0),
                 &editor_cookie,
                 r#"{"email":"o@example.com"}"#,
+            ))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::FORBIDDEN);
+    }
+
+    #[tokio::test]
+    async fn lists_members_and_changes_a_role() {
+        let (_c, _tmp, state, pool) = cloud().await;
+        let cloud = state.cloud.clone().unwrap();
+        let owner = seed_user_with_email(&pool, "owner@example.com").await;
+        let owner_cookie = cloud.sessions.create(owner).await.unwrap().token;
+        let ws = cloud
+            .workspaces
+            .create_with_owner(owner, "Team")
+            .await
+            .unwrap();
+        let editor = seed_user_with_email(&pool, "ed@example.com").await;
+        cloud
+            .workspaces
+            .add_member_by_email(ws, "ed@example.com", Role::Editor)
+            .await
+            .unwrap();
+
+        // The owner lists members (both rows).
+        let resp = build_app(state.clone(), None)
+            .oneshot(get_req(
+                &format!("/workspaces/{}/members", ws.0),
+                &owner_cookie,
+            ))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        assert_eq!(json(resp).await.as_array().unwrap().len(), 2);
+
+        // The owner demotes the editor to a viewer.
+        let resp = build_app(state.clone(), None)
+            .oneshot(req(
+                "PUT",
+                &format!("/workspaces/{}/members/{}", ws.0, editor),
+                &owner_cookie,
+                r#"{"role":"viewer"}"#,
+            ))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::NO_CONTENT);
+        assert_eq!(
+            cloud.workspaces.membership(editor, ws).await.unwrap(),
+            Some(Role::Viewer)
+        );
+    }
+
+    #[tokio::test]
+    async fn a_non_owner_cannot_change_roles() {
+        let (_c, _tmp, state, pool) = cloud().await;
+        let cloud = state.cloud.clone().unwrap();
+        let owner = seed_user(&pool).await;
+        let ws = cloud
+            .workspaces
+            .create_with_owner(owner, "W")
+            .await
+            .unwrap();
+        let editor = seed_user_with_email(&pool, "ed@example.com").await;
+        cloud
+            .workspaces
+            .add_member_by_email(ws, "ed@example.com", Role::Editor)
+            .await
+            .unwrap();
+        let editor_cookie = cloud.sessions.create(editor).await.unwrap().token;
+
+        let resp = build_app(state.clone(), None)
+            .oneshot(req(
+                "PUT",
+                &format!("/workspaces/{}/members/{}", ws.0, owner),
+                &editor_cookie,
+                r#"{"role":"viewer"}"#,
+            ))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::FORBIDDEN);
+    }
+
+    #[tokio::test]
+    async fn owner_mints_a_watch_token_but_a_viewer_cannot() {
+        let (_c, _tmp, state, pool) = cloud().await;
+        let cloud = state.cloud.clone().unwrap();
+        let owner = seed_user(&pool).await;
+        let ws = cloud
+            .workspaces
+            .create_with_owner(owner, "W")
+            .await
+            .unwrap();
+        let owner_cookie = cloud.sessions.create(owner).await.unwrap().token;
+
+        let resp = build_app(state.clone(), None)
+            .oneshot(req(
+                "POST",
+                &format!("/workspaces/{}/overlay-token", ws.0),
+                &owner_cookie,
+                "",
+            ))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let token = json(resp).await["token"].as_str().unwrap().to_string();
+        assert_eq!(
+            cloud.overlay_tokens.validate(&token).await.unwrap(),
+            Some(ws)
+        );
+
+        let viewer = seed_user_with_email(&pool, "v@example.com").await;
+        cloud
+            .workspaces
+            .add_member_by_email(ws, "v@example.com", Role::Viewer)
+            .await
+            .unwrap();
+        let viewer_cookie = cloud.sessions.create(viewer).await.unwrap().token;
+        let resp = build_app(state.clone(), None)
+            .oneshot(req(
+                "POST",
+                &format!("/workspaces/{}/overlay-token", ws.0),
+                &viewer_cookie,
+                "",
             ))
             .await
             .unwrap();
