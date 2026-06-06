@@ -54,6 +54,11 @@ export interface WorkspaceClient {
 	setThemeToken(id: string, token: string, value: string): void;
 	deleteTheme(id: string): void;
 	exportTheme(id: string): { name: string; base: string; tokens: ThemeTokens } | null;
+	createLayout(name: string): string;
+	renameLayout(id: string, name: string): void;
+	duplicateLayout(id: string, name: string): string | undefined;
+	archiveLayout(id: string): void;
+	activateLayout(id: string): void;
 	undo(): void;
 	redo(): void;
 	dispose(): void;
@@ -196,6 +201,21 @@ export function createWorkspaceClient(
 		},
 		exportTheme(id) {
 			return mutate.exportTheme(doc, id);
+		},
+		createLayout(name) {
+			return tx(() => mutate.createLayout(doc, name));
+		},
+		renameLayout(id, name) {
+			tx(() => mutate.renameLayout(doc, id, name));
+		},
+		duplicateLayout(id, name) {
+			return tx(() => mutate.duplicateLayout(doc, id, name));
+		},
+		archiveLayout(id) {
+			tx(() => mutate.archiveLayout(doc, id));
+		},
+		activateLayout(id) {
+			tx(() => mutate.activateLayout(doc, id));
 		},
 		undo() {
 			undo.undo();

@@ -30,6 +30,8 @@ export interface SceneView {
 export interface LayoutView {
 	id: string;
 	name: string;
+	/** 'active' | 'archived'; the switcher lists active layouts only. */
+	status: string;
 	activeSceneId: string;
 	scenes: SceneView[];
 }
@@ -106,6 +108,7 @@ function projectLayout(node: LoroTreeNode): LayoutView {
 	return {
 		id: String(node.id),
 		name: str(node.data.get('name')),
+		status: str(node.data.get('status')),
 		activeSceneId: str(node.data.get('activeSceneId')),
 		scenes: (node.children() ?? [])
 			.filter((child) => child.data.get('type') === 'scene')

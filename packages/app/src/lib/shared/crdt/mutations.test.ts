@@ -1,8 +1,12 @@
 import { describe, expect, test } from 'vitest';
 import { LoroDoc, UndoManager } from 'loro-crdt';
 import {
+	activateLayout,
+	archiveLayout,
+	createLayout,
 	createWidget,
 	deleteWidget,
+	duplicateLayout,
 	moveWidgetToScene,
 	setSceneOverride,
 	setSceneTheme,
@@ -42,6 +46,53 @@ function buildFixture() {
 
 const sceneByKind = (doc: LoroDoc, kind: string) =>
 	readWorkspace(doc).scenes.find((scene) => scene.kind === kind)!;
+
+describe('layouts', () => {
+	test('createLayout adds an active layout with a starter scene', () => {
+		const { doc } = buildFixture();
+		const id = createLayout(doc, 'Vertical');
+		doc.commit();
+		const layout = readWorkspace(doc).layouts.find((l) => l.id === id)!;
+		expect(layout.name).toBe('Vertical');
+		expect(layout.status).toBe('active');
+		expect(layout.scenes).toHaveLength(1);
+		expect(layout.activeSceneId).toBe(layout.scenes[0].id);
+	});
+
+	test('activateLayout points the workspace at a layout', () => {
+		const { doc } = buildFixture();
+		const id = createLayout(doc, 'Vertical');
+		activateLayout(doc, id);
+		doc.commit();
+		expect(readWorkspace(doc).activeLayoutId).toBe(id);
+	});
+
+	test('duplicateLayout deep-copies scenes and widgets with fresh ids', () => {
+		const { doc, scenes } = buildFixture();
+		createWidget(doc, scenes.live, 'goal-bar', { x: 1, y: 2, w: 3, h: 4, z: 5 }, { label: 'G' });
+		doc.commit();
+		const sourceId = readWorkspace(doc).layouts[0].id;
+		const copyId = duplicateLayout(doc, sourceId, 'Main copy')!;
+		doc.commit();
+		const copy = readWorkspace(doc).layouts.find((l) => l.id === copyId)!;
+		expect(copy.name).toBe('Main copy');
+		expect(copy.scenes).toHaveLength(2);
+		const liveCopy = copy.scenes.find((s) => s.kind === 'live')!;
+		expect(liveCopy.widgets).toHaveLength(1);
+		expect(liveCopy.widgets[0].props.label).toBe('G');
+		expect(copy.id).not.toBe(sourceId);
+		expect(liveCopy.id).not.toBe(scenes.live);
+		expect(copy.activeSceneId).toBe(liveCopy.id);
+	});
+
+	test('archiveLayout marks the layout archived', () => {
+		const { doc } = buildFixture();
+		const id = createLayout(doc, 'Temp');
+		archiveLayout(doc, id);
+		doc.commit();
+		expect(readWorkspace(doc).layouts.find((l) => l.id === id)!.status).toBe('archived');
+	});
+});
 
 const GEOM = { x: 10, y: 20, w: 100, h: 50, z: 3 };
 

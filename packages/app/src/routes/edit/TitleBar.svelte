@@ -4,6 +4,7 @@
 	import Roster, { type RosterPerson } from '$lib/features/presence/ui/Roster.svelte';
 	import SyncPill from '$lib/features/presence/ui/SyncPill.svelte';
 	import ShareButton from '$lib/features/collaboration/ui/ShareButton.svelte';
+	import LayoutSwitcher, { type LayoutNav } from './LayoutSwitcher.svelte';
 	import type { ConnectionState } from '$lib/shared/crdt/sync-bridge';
 
 	interface Props {
@@ -30,6 +31,8 @@
 		onOpenShare?: () => void;
 		/** Whether the workspace is actively shared (drives the Share button state). */
 		shareLive?: boolean;
+		/** The layout switcher (active layouts + switch / create / duplicate / archive). */
+		layoutNav?: LayoutNav;
 	}
 
 	let {
@@ -45,7 +48,8 @@
 		people = [],
 		onOpenShare,
 		syncState = 'syncing',
-		shareLive = false
+		shareLive = false,
+		layoutNav
 	}: Props = $props();
 </script>
 
@@ -61,6 +65,7 @@
 			<PanelLeft size={16} />
 		</button>
 		<span class="mark">{m['app.name']()}</span>
+		{#if layoutNav}<LayoutSwitcher {...layoutNav} />{/if}
 		<SyncPill state={syncState} onClick={onOpenShare} />
 		<span class="chip" title={m['editor.titlebar.draft']()}>{m['editor.titlebar.draft']()}</span>
 	</div>

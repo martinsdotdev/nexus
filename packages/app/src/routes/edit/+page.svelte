@@ -131,6 +131,43 @@
 	const editorBus = createEventBus();
 	let testEventIndex = 0;
 
+	// The titlebar layout switcher: switch among active layouts, or create / duplicate /
+	// archive one. Switching clears the selection (the old layout's widget left the canvas).
+	// `open` is controlled so the open-layout command can pop the menu.
+	let layoutMenuOpen = $state(false);
+	const layoutNav = $derived.by(() => {
+		if (!workspace) return undefined;
+		const client = workspace;
+		const layouts = client.workspace.layouts.filter((layout) => layout.status !== 'archived');
+		const activeId = client.workspace.activeLayoutId;
+		const switchTo = (id: string) => {
+			client.activateLayout(id);
+			shell.clearSelection();
+		};
+		return {
+			layouts: layouts.map((layout) => ({ id: layout.id, name: layout.name })),
+			activeLayoutId: activeId,
+			onSwitch: switchTo,
+			onCreate: () => {
+				const id = client.createLayout(`Layout ${client.workspace.layouts.length + 1}`);
+				if (id) switchTo(id);
+			},
+			onDuplicate: () => {
+				const name = layouts.find((layout) => layout.id === activeId)?.name ?? 'Layout';
+				const id = client.duplicateLayout(activeId, `${name} copy`);
+				if (id) switchTo(id);
+			},
+			onArchive: () => {
+				const next = layouts.find((layout) => layout.id !== activeId);
+				if (!next) return; // never archive the last layout
+				client.archiveLayout(activeId);
+				switchTo(next.id);
+			},
+			open: layoutMenuOpen,
+			onOpenChange: (open: boolean) => (layoutMenuOpen = open)
+		};
+	});
+
 	// The command palette's commands; runCommand dispatches by id.
 	const commands: CommandItem[] = [
 		{ id: 'add-widget', label: m['editor.command.add_widget']() },
@@ -166,8 +203,8 @@
 		if (id === 'add-widget') addWidget('stream-info');
 		else if (id === 'switch-theme') shell.openThemeEditor();
 		else if (id === 'fire-test-alert') editorBus.emit(testEventAt(testEventIndex++, Date.now()));
-		// toggle-mode, open-layout, use-in-obs: deferred to their own increments
-		// (live/draft, layout switching, OBS).
+		else if (id === 'open-layout') layoutMenuOpen = true;
+		// toggle-mode, use-in-obs: deferred to their own increments (live/draft, OBS).
 	}
 
 	// Editor keyboard shortcuts (client-only; never at module scope). The dispatch lives in
@@ -244,6 +281,7 @@
 		syncState={workspace?.connection ?? 'syncing'}
 		onOpenShare={selfIdentity ? openShare : undefined}
 		shareLive={collaboration?.shareLive ?? false}
+		{layoutNav}
 	/>
 	<ToolRail activeToolId={shell.activeToolId} onSelect={(id) => shell.setActiveTool(id)} />
 

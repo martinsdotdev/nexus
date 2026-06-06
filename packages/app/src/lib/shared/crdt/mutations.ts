@@ -11,6 +11,7 @@ import type { ThemeTokens } from './workspace-view';
 
 const TREE = 'tree';
 const THEMES = 'themes';
+const WORKSPACE = 'workspace';
 
 function nodeById(doc: LoroDoc, id: string): LoroTreeNode | undefined {
 	return doc.getTree(TREE).getNodeByID(id as TreeID);
@@ -78,6 +79,74 @@ export function deleteWidget(doc: LoroDoc, id: string): void {
 
 export function moveWidgetToScene(doc: LoroDoc, id: string, sceneId: string): void {
 	doc.getTree(TREE).move(id as TreeID, sceneId as TreeID);
+}
+
+// --- Layouts (each is a tree root holding scenes -> widgets) ------------------
+// A layout is a root node of the tree; the active one is named by the workspace
+// map's `activeLayoutId`. Clients may create layouts freely: Loro TreeIDs are
+// conflict-free (trap T1 concerns only the relay-seeded curated default).
+
+/** Copy a node's flat meta (type, geometry, props, ...) onto another node. */
+function copyMeta(from: LoroTreeNode, to: LoroTreeNode): void {
+	for (const [key, value] of Object.entries(from.data.toJSON() as Record<string, unknown>)) {
+		to.data.set(key, value as never);
+	}
+}
+
+/** Create a new layout with one starter scene; returns the new layout id. */
+export function createLayout(doc: LoroDoc, name: string): string {
+	const layout = doc.getTree(TREE).createNode();
+	layout.data.set('type', 'layout');
+	layout.data.set('name', name);
+	layout.data.set('status', 'active');
+	const scene = layout.createNode();
+	scene.data.set('type', 'scene');
+	scene.data.set('kind', 'live');
+	scene.data.set('name', 'live');
+	scene.data.set('themeId', 'cozy');
+	layout.data.set('activeSceneId', String(scene.id));
+	return String(layout.id);
+}
+
+/** Deep-copy a layout (its scenes + their widgets) into a new one; returns its id. */
+export function duplicateLayout(doc: LoroDoc, id: string, name: string): string | undefined {
+	const source = nodeById(doc, id);
+	if (!source) return undefined;
+	const layout = doc.getTree(TREE).createNode();
+	layout.data.set('type', 'layout');
+	layout.data.set('name', name);
+	layout.data.set('status', 'active');
+	const sourceActive = String(source.data.get('activeSceneId') ?? '');
+	let activeSceneId = '';
+	for (const sceneNode of source.children() ?? []) {
+		if (sceneNode.data.get('type') !== 'scene') continue;
+		const scene = layout.createNode();
+		copyMeta(sceneNode, scene);
+		for (const widgetNode of sceneNode.children() ?? []) {
+			if (widgetNode.data.get('type') === 'widget') copyMeta(widgetNode, scene.createNode());
+		}
+		if (String(sceneNode.id) === sourceActive) activeSceneId = String(scene.id);
+	}
+	layout.data.set('activeSceneId', activeSceneId || String((layout.children() ?? [])[0]?.id ?? ''));
+	return String(layout.id);
+}
+
+export function renameLayout(doc: LoroDoc, id: string, name: string): void {
+	nodeById(doc, id)?.data.set('name', name);
+}
+
+/** Archive a layout: hide it from the switcher and blank its active scene (the relay's
+ *  validator requires an archived layout to hold none, so do it here to match). */
+export function archiveLayout(doc: LoroDoc, id: string): void {
+	const node = nodeById(doc, id);
+	if (!node) return;
+	node.data.set('status', 'archived');
+	node.data.set('activeSceneId', '');
+}
+
+/** Point the workspace at a layout (the editor + overlay project the active one). */
+export function activateLayout(doc: LoroDoc, id: string): void {
+	doc.getMap(WORKSPACE).set('activeLayoutId', id);
 }
 
 export function setSceneTheme(doc: LoroDoc, sceneId: string, themeId: string): void {
