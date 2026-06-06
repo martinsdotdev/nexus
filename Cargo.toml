@@ -33,6 +33,9 @@ base64 = "0.22"
 subtle = "2"
 # Email-code method (ADR-0010): a deliberately slow hash for the low-entropy 8-char code.
 argon2 = "0.5"
+# Resend email provider (ADR-0010): one HTTPS POST per code. rustls (no OpenSSL) matches
+# sqlx and keeps the Docker build lean; json serializes the request body via serde.
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
 # Cloud mode (ADR-0009/0010). Postgres-backed sessions + auth; the cookie jar. Present
 # only in cloud mode (NEXUS_DATABASE_URL set); local file mode does not build a pool.
 sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio", "tls-rustls", "postgres", "macros", "migrate", "uuid", "chrono"] }

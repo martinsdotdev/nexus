@@ -50,4 +50,15 @@ pub struct ServeArgs {
     /// at a temp file to read the code without a mailbox.
     #[arg(long, env = "NEXUS_EMAIL_SINK")]
     pub email_sink: Option<PathBuf>,
+
+    /// Resend API key. When set (cloud mode), one-time login codes are emailed via Resend
+    /// rather than logged. Keep it secret: provide it as `NEXUS_RESEND_API_KEY`, never in
+    /// source or a committed config.
+    #[arg(long, env = "NEXUS_RESEND_API_KEY")]
+    pub resend_api_key: Option<String>,
+
+    /// The verified Resend "from" address for login-code emails (e.g.
+    /// `Nexus <noreply@nexus.umaru.dev>`). Required when `--resend-api-key` is set.
+    #[arg(long, env = "NEXUS_RESEND_FROM")]
+    pub resend_from: Option<String>,
 }

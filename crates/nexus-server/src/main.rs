@@ -68,9 +68,27 @@ async fn main() -> anyhow::Result<()> {
                         let cloud = http::CloudAuth {
                             sessions: auth::session::SessionStore::new(pool.clone()),
                             emails: auth::email::EmailStore::new(pool.clone()),
-                            sender: match &args.email_sink {
-                                Some(path) => auth::email_sender::EmailSender::File(path.clone()),
-                                None => auth::email_sender::EmailSender::Log,
+                            // Prefer Resend when its key is set; fall back to the file sink
+                            // (e2e/dev) or the log (interim). The key never lives in source.
+                            sender: match (
+                                &args.resend_api_key,
+                                &args.resend_from,
+                                &args.email_sink,
+                            ) {
+                                (Some(api_key), Some(from), _) => {
+                                    auth::email_sender::EmailSender::Resend {
+                                        client: reqwest::Client::new(),
+                                        api_key: api_key.clone(),
+                                        from: from.clone(),
+                                    }
+                                }
+                                (Some(_), None, _) => anyhow::bail!(
+                                    "NEXUS_RESEND_API_KEY is set but NEXUS_RESEND_FROM is required"
+                                ),
+                                (None, _, Some(path)) => {
+                                    auth::email_sender::EmailSender::File(path.clone())
+                                }
+                                (None, _, None) => auth::email_sender::EmailSender::Log,
                             },
                             workspaces,
                             overlay_tokens: workspaces::overlay_token::OverlayTokenStore::new(

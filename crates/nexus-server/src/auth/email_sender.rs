@@ -1,12 +1,11 @@
 //! The `EmailSender` port (ADR-0010). Delivering the one-time code is an impure side
 //! effect at the edge of the system, so it lives behind a small enum the routes call.
 //!
-//! No real provider is wired yet (ADR-0010 defers Resend/Postmark/SES). Two production
-//! variants exist meanwhile: `Log` writes the code to the tracing log (how an operator
-//! retrieves it in the interim), and `File` appends each `<recipient>\t<code>` line to a
-//! file (a simple local sink, and what the auth e2e reads to complete a sign-in without a
-//! mailbox). A `cfg(test)` `Capture` variant lets in-crate route tests read the code.
-//! Adding a real provider later is just another variant.
+//! `Resend` is the real provider: a single HTTPS POST to api.resend.com, selected when
+//! `NEXUS_RESEND_API_KEY` is set. Two interim variants remain for local/dev use: `Log`
+//! writes the code to the tracing log, and `File` appends each `<recipient>\t<code>` line
+//! to a file (a simple local sink, and what the auth e2e reads to complete a sign-in
+//! without a mailbox). A `cfg(test)` `Capture` variant lets in-crate route tests read it.
 
 use std::path::PathBuf;
 
@@ -17,9 +16,25 @@ pub enum EmailSender {
     Log,
     /// Append each `<recipient>\t<code>` line to a file (a local sink; the e2e reads it).
     File(PathBuf),
+    /// Real delivery via Resend (api.resend.com): a shared client plus the API key and the
+    /// verified `from` address. Selected in `main` when `NEXUS_RESEND_API_KEY` is set.
+    Resend {
+        client: reqwest::Client,
+        api_key: String,
+        from: String,
+    },
     /// Test-only: record every `(recipient, code)` so a route test can read it back.
     #[cfg(test)]
     Capture(std::sync::Arc<std::sync::Mutex<Vec<(String, String)>>>),
+}
+
+/// The Resend send-email request body (serialized to JSON by reqwest).
+#[derive(serde::Serialize)]
+struct ResendEmail<'a> {
+    from: &'a str,
+    to: [&'a str; 1],
+    subject: &'a str,
+    text: String,
 }
 
 impl EmailSender {
@@ -38,6 +53,33 @@ impl EmailSender {
                     .append(true)
                     .open(path)?;
                 writeln!(file, "{to}\t{code}")?;
+                Ok(())
+            }
+            EmailSender::Resend {
+                client,
+                api_key,
+                from,
+            } => {
+                let email = ResendEmail {
+                    from,
+                    to: [to],
+                    subject: "Your Nexus sign-in code",
+                    text: format!(
+                        "Your Nexus sign-in code is {code}.\n\nIt expires in an hour. \
+                         If you didn't try to sign in, you can ignore this email."
+                    ),
+                };
+                let res = client
+                    .post("https://api.resend.com/emails")
+                    .bearer_auth(api_key)
+                    .json(&email)
+                    .send()
+                    .await?;
+                let status = res.status();
+                if !status.is_success() {
+                    let detail = res.text().await.unwrap_or_default();
+                    anyhow::bail!("Resend API returned {status}: {detail}");
+                }
                 Ok(())
             }
             #[cfg(test)]

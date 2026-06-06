@@ -29,6 +29,7 @@ uuid.workspace = true
 chrono.workspace = true
 time.workspace = true
 serde.workspace = true
+reqwest.workspace = true
 
 [dev-dependencies]
 testcontainers-modules.workspace = true
