@@ -82,7 +82,14 @@ export function createPresence(
 			return peers;
 		},
 		subscribe(listener) {
-			return store.subscribe(() => listener());
+			// Only remote merges (`import`) and expirations (`timeout`) change what
+			// remotePeers() returns; a local set never does (self is excluded). Notifying on
+			// a local change is a wasted re-render at best, and at worst re-enters whatever
+			// effect drove the write (setSelection from edit/+page's broadcast $effect),
+			// tripping Svelte's effect_update_depth_exceeded. So drop local events.
+			return store.subscribe((event) => {
+				if (event.by !== 'local') listener();
+			});
 		},
 		destroy() {
 			offLocalUpdates();

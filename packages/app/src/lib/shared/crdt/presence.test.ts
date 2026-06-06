@@ -39,6 +39,33 @@ describe('presence', () => {
 		b.destroy();
 	});
 
+	it('notifies subscribers on remote changes but not on local ones', async () => {
+		const { a, b } = connected();
+		await tick();
+
+		let notifications = 0;
+		const off = b.subscribe(() => {
+			notifications += 1;
+		});
+
+		// b's own cursor/selection never appears in its remotePeers() (self is excluded),
+		// so a local change must not notify: a no-op re-render at best, and at worst it
+		// re-enters whatever effect drove the change (Svelte effect_update_depth_exceeded).
+		b.setCursor(5, 5);
+		b.setSelection(['w1']);
+		await tick();
+		expect(notifications).toBe(0);
+
+		// A remote peer's change does alter remotePeers(), so it must notify.
+		a.setCursor(9, 9);
+		await tick();
+		expect(notifications).toBeGreaterThan(0);
+
+		off();
+		a.destroy();
+		b.destroy();
+	});
+
 	it('de-dupes two tabs of one account into a single peer', async () => {
 		const b = createPresence({ id: 'bob', name: 'Bob' }, () => {});
 		const tab1 = createPresence({ id: 'alice', name: 'Alice' }, (bytes) => b.apply(bytes));
