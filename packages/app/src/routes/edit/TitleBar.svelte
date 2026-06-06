@@ -3,6 +3,7 @@
 	import { Undo2, Redo2, MonitorPlay, PanelLeft, PanelRight, Search } from 'lucide-svelte';
 	import Roster, { type RosterPerson } from '$lib/features/presence/ui/Roster.svelte';
 	import SyncPill from '$lib/features/presence/ui/SyncPill.svelte';
+	import ShareButton from '$lib/features/presence/ui/ShareButton.svelte';
 	import type { ConnectionState } from '$lib/shared/crdt/sync-bridge';
 
 	interface Props {
@@ -25,8 +26,10 @@
 		people?: RosterPerson[];
 		/** The live relay connection state (shown as the sync pill). */
 		syncState?: ConnectionState;
-		/** Open the Share / collaborators panel (wires the stack click). */
+		/** Open the Share / collaborators panel (wires the stack + sync-pill click). */
 		onOpenShare?: () => void;
+		/** Whether the workspace is actively shared (drives the Share button state). */
+		shareLive?: boolean;
 	}
 
 	let {
@@ -41,7 +44,8 @@
 		onOpenPalette,
 		people = [],
 		onOpenShare,
-		syncState = 'syncing'
+		syncState = 'syncing',
+		shareLive = false
 	}: Props = $props();
 </script>
 
@@ -57,7 +61,7 @@
 			<PanelLeft size={16} />
 		</button>
 		<span class="mark">{m['app.name']()}</span>
-		<SyncPill state={syncState} />
+		<SyncPill state={syncState} onClick={onOpenShare} />
 		<span class="chip" title={m['editor.titlebar.draft']()}>{m['editor.titlebar.draft']()}</span>
 	</div>
 
@@ -76,7 +80,15 @@
 	</button>
 
 	<div class="actions">
-		<Roster {people} onOpen={onOpenShare} />
+		{#if onOpenShare}
+			<div class="cluster">
+				<Roster {people} onOpen={onOpenShare} />
+				<ShareButton live={shareLive} onClick={onOpenShare} />
+			</div>
+			<span class="divider-v"></span>
+		{:else}
+			<Roster {people} />
+		{/if}
 
 		<!-- Shown when the inspector is off-canvas (medium and narrower); opens its drawer. -->
 		<button
@@ -193,6 +205,19 @@
 		align-items: center;
 		gap: var(--space-2);
 		justify-self: end;
+	}
+
+	/* The presence cluster (avatar stack + Share), set off from the editor actions. */
+	.cluster {
+		display: inline-flex;
+		align-items: center;
+		gap: var(--space-2);
+	}
+
+	.divider-v {
+		width: 1px;
+		height: 20px;
+		background: var(--divider);
 	}
 
 	.ghost {

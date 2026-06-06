@@ -3,7 +3,9 @@ import { peerColor, peerColorKey, colorVar, PRESENCE_KEYS } from './peer-color';
 
 describe('peer-color', () => {
 	it('maps an id to a curated palette var', () => {
-		expect(peerColor('user-1')).toMatch(/^var\(--mp-(amber|green|violet|pink|cyan|lime|red|teal)\)$/);
+		expect(peerColor('user-1')).toMatch(
+			/^var\(--mp-(amber|green|violet|pink|cyan|lime|red|teal)\)$/
+		);
 	});
 
 	it('is stable for the same id', () => {
