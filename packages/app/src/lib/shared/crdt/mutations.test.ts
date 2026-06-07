@@ -4,10 +4,15 @@ import {
 	activateLayout,
 	archiveLayout,
 	createLayout,
+	createScene,
 	createWidget,
+	deleteScene,
 	deleteWidget,
 	duplicateLayout,
+	duplicateScene,
 	moveWidgetToScene,
+	renameScene,
+	reorderScene,
 	setSceneOverride,
 	setSceneTheme,
 	setWidgetGeometry,
@@ -172,6 +177,90 @@ describe('scene mutations', () => {
 		const live = sceneByKind(doc, 'live');
 		expect(live.themeId).toBe('cyber');
 		expect(live.overridesAccent).toBe('oklch(70% 0.2 30)');
+	});
+});
+
+describe('scene CRUD', () => {
+	test('createScene appends a custom-kind scene with the default theme', () => {
+		const { doc } = buildFixture();
+		const layoutId = readWorkspace(doc).layouts[0].id;
+		const id = createScene(doc, layoutId, 'Intermission')!;
+		doc.commit();
+
+		const scenes = readWorkspace(doc).scenes;
+		expect(scenes).toHaveLength(3);
+		const created = scenes.find((s) => s.id === id)!;
+		expect(created.name).toBe('Intermission');
+		expect(created.kind).toBe('custom');
+		expect(created.themeId).toBe('cozy');
+		// Appended after the seeded scenes.
+		expect(scenes[scenes.length - 1].id).toBe(id);
+	});
+
+	test('renameScene changes the name', () => {
+		const { doc, scenes } = buildFixture();
+		renameScene(doc, scenes.brb, 'Be Right Back');
+		doc.commit();
+		expect(sceneByKind(doc, 'brb').name).toBe('Be Right Back');
+	});
+
+	test('deleteScene removes a non-active scene', () => {
+		const { doc, scenes } = buildFixture();
+		deleteScene(doc, scenes.brb);
+		doc.commit();
+		const remaining = readWorkspace(doc).scenes;
+		expect(remaining).toHaveLength(1);
+		expect(remaining[0].id).toBe(scenes.live);
+	});
+
+	test('deleteScene re-points activeSceneId when the active scene is deleted', () => {
+		const { doc, scenes } = buildFixture();
+		// `live` is the active scene in the fixture.
+		deleteScene(doc, scenes.live);
+		doc.commit();
+		const ws = readWorkspace(doc);
+		expect(ws.scenes).toHaveLength(1);
+		expect(ws.activeSceneId).toBe(scenes.brb);
+		expect(ws.scenes[0].id).toBe(scenes.brb);
+	});
+
+	test('deleteScene refuses to remove the last remaining scene', () => {
+		const { doc, scenes } = buildFixture();
+		deleteScene(doc, scenes.brb);
+		doc.commit();
+		deleteScene(doc, scenes.live); // would empty the layout
+		doc.commit();
+		expect(readWorkspace(doc).scenes).toHaveLength(1);
+	});
+
+	test('duplicateScene copies the scene and its widgets with fresh ids', () => {
+		const { doc, scenes } = buildFixture();
+		createWidget(doc, scenes.live, 'goal-bar', { x: 1, y: 2, w: 3, h: 4, z: 5 }, { label: 'G' });
+		doc.commit();
+		const originalWidgetId = sceneByKind(doc, 'live').widgets[0].id;
+
+		const copyId = duplicateScene(doc, scenes.live, 'Live copy')!;
+		doc.commit();
+
+		const scenesNow = readWorkspace(doc).scenes;
+		expect(scenesNow).toHaveLength(3);
+		const copy = scenesNow.find((s) => s.id === copyId)!;
+		expect(copy.name).toBe('Live copy');
+		expect(copy.kind).toBe('live'); // meta copied from the source
+		expect(copy.themeId).toBe('cozy');
+		expect(copy.widgets).toHaveLength(1);
+		expect(copy.widgets[0].props.label).toBe('G');
+		expect(copy.id).not.toBe(scenes.live);
+		expect(copy.widgets[0].id).not.toBe(originalWidgetId);
+	});
+
+	test('reorderScene moves a scene to a new index', () => {
+		const { doc, scenes } = buildFixture();
+		// Fixture order: [live, brb]. Move brb to the front.
+		reorderScene(doc, scenes.brb, 0);
+		doc.commit();
+		const order = readWorkspace(doc).scenes.map((s) => s.kind);
+		expect(order).toEqual(['brb', 'live']);
 	});
 });
 

@@ -157,6 +157,63 @@ export function setSceneOverride(doc: LoroDoc, sceneId: string, key: string, val
 	nodeById(doc, sceneId)?.data.set(key, value);
 }
 
+/** Create a freeform scene under a layout; returns its id. A `custom`-kind scene
+ *  with the default theme, appended after the layout's existing scenes. */
+export function createScene(doc: LoroDoc, layoutId: string, name: string): string | undefined {
+	const layout = nodeById(doc, layoutId);
+	if (!layout) return undefined;
+	const scene = layout.createNode();
+	scene.data.set('type', 'scene');
+	scene.data.set('kind', 'custom');
+	scene.data.set('name', name);
+	scene.data.set('themeId', 'cozy');
+	return String(scene.id);
+}
+
+export function renameScene(doc: LoroDoc, sceneId: string, name: string): void {
+	nodeById(doc, sceneId)?.data.set('name', name);
+}
+
+/** Delete a scene. Refuses to remove a layout's only scene (a layout always keeps
+ *  one), and re-points the layout's `activeSceneId` to a surviving sibling first
+ *  when the deleted scene was active, so the active pointer never dangles. */
+export function deleteScene(doc: LoroDoc, sceneId: string): void {
+	const tree = doc.getTree(TREE);
+	const node = nodeById(doc, sceneId);
+	const layout = node?.parent();
+	if (!node || !layout) return;
+	const siblings = (layout.children() ?? []).filter((child) => child.data.get('type') === 'scene');
+	if (siblings.length <= 1) return; // a layout keeps at least one scene
+	if (String(layout.data.get('activeSceneId')) === sceneId) {
+		const survivor = siblings.find((scene) => String(scene.id) !== sceneId);
+		if (survivor) layout.data.set('activeSceneId', String(survivor.id));
+	}
+	tree.delete(sceneId as TreeID);
+}
+
+/** Deep-copy a scene (its meta + child widgets) into a new sibling; returns its id. */
+export function duplicateScene(doc: LoroDoc, sceneId: string, name: string): string | undefined {
+	const source = nodeById(doc, sceneId);
+	const layout = source?.parent();
+	if (!source || !layout) return undefined;
+	const scene = layout.createNode();
+	copyMeta(source, scene);
+	scene.data.set('name', name);
+	for (const widget of source.children() ?? []) {
+		if (widget.data.get('type') === 'widget') copyMeta(widget, scene.createNode());
+	}
+	return String(scene.id);
+}
+
+/** Move a scene to a new index among its layout's scenes (strip order is tree order). */
+export function reorderScene(doc: LoroDoc, sceneId: string, index: number): void {
+	const tree = doc.getTree(TREE);
+	const node = nodeById(doc, sceneId);
+	const layout = node?.parent();
+	if (!node || !layout) return;
+	tree.move(sceneId as TreeID, layout.id, index);
+}
+
 // --- Theme registry (root "themes" map of nested theme maps) -----------------
 // The relay seeds the built-ins here as `protected` (ADR-0007); user themes are
 // added with caller-minted ids (unique, never names) so two themes named the

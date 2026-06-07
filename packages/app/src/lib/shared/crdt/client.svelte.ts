@@ -58,6 +58,14 @@ export interface WorkspaceClient {
 	moveWidgetToScene(id: string, sceneId: string): void;
 	setSceneTheme(sceneId: string, themeId: string): void;
 	setSceneOverride(sceneId: string, key: string, value: string): void;
+	/** Add a freeform scene to the active layout; returns its id. */
+	createScene(name: string): string | undefined;
+	renameScene(sceneId: string, name: string): void;
+	/** Delete a scene (refused for a layout's only scene; re-points active first). */
+	deleteScene(sceneId: string): void;
+	duplicateScene(sceneId: string, name: string): string | undefined;
+	/** Move a scene to a new index among the active layout's scenes. */
+	reorderScene(sceneId: string, index: number): void;
 	createTheme(name: string, base: string, tokens: ThemeTokens): string;
 	renameTheme(id: string, name: string): void;
 	setThemeToken(id: string, token: string, value: string): void;
@@ -219,6 +227,24 @@ export function createWorkspaceClient(
 		},
 		setSceneOverride(sceneId, key, value) {
 			tx((doc) => mutate.setSceneOverride(doc, sceneId, key, value));
+		},
+		createScene(name) {
+			return tx((doc) => {
+				const layout = activeLayout(doc);
+				return layout ? mutate.createScene(doc, String(layout.id), name) : undefined;
+			});
+		},
+		renameScene(sceneId, name) {
+			tx((doc) => mutate.renameScene(doc, sceneId, name));
+		},
+		deleteScene(sceneId) {
+			tx((doc) => mutate.deleteScene(doc, sceneId));
+		},
+		duplicateScene(sceneId, name) {
+			return tx((doc) => mutate.duplicateScene(doc, sceneId, name));
+		},
+		reorderScene(sceneId, index) {
+			tx((doc) => mutate.reorderScene(doc, sceneId, index));
 		},
 		createTheme(name, base, tokens) {
 			// Mint a unique id (never the name) so concurrent creates never collide.
