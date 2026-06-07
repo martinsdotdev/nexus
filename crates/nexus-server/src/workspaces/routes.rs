@@ -80,6 +80,49 @@ async fn create_workspace(
 }
 
 #[derive(Deserialize)]
+struct RenameWorkspace {
+    name: String,
+}
+
+/// `PUT /workspaces/:id`: rename a workspace (owner only).
+async fn rename_workspace(
+    State(state): State<AppState>,
+    WorkspaceOwner { workspace }: WorkspaceOwner,
+    Json(body): Json<RenameWorkspace>,
+) -> Result<StatusCode, StatusCode> {
+    let cloud = state.cloud.as_ref().ok_or(StatusCode::NOT_FOUND)?;
+    let name = body.name.trim();
+    if name.is_empty() {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+    cloud
+        .workspaces
+        .rename(workspace, name)
+        .await
+        .map_err(internal)?
+        .ok_or(StatusCode::NOT_FOUND)?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+/// `DELETE /workspaces/:id`: delete a workspace and evict its live runtime (owner only).
+/// The Postgres delete cascades the membership + overlay-token rows and drops the snapshot
+/// column; eviction frees the in-memory replica.
+async fn delete_workspace(
+    State(state): State<AppState>,
+    WorkspaceOwner { workspace }: WorkspaceOwner,
+) -> Result<StatusCode, StatusCode> {
+    let cloud = state.cloud.as_ref().ok_or(StatusCode::NOT_FOUND)?;
+    cloud
+        .workspaces
+        .delete(workspace)
+        .await
+        .map_err(internal)?
+        .ok_or(StatusCode::NOT_FOUND)?;
+    state.registry.evict(workspace).await;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+#[derive(Deserialize)]
 struct InviteMember {
     email: String,
     role: Option<Role>,
@@ -222,7 +265,14 @@ fn internal<E: std::fmt::Display>(err: E) -> StatusCode {
 /// The cloud-mode workspace routes, with the CSRF guard layered on.
 pub fn router() -> Router<AppState> {
     Router::new()
-        .route("/api/workspaces", get(list_workspaces).post(create_workspace))
+        .route(
+            "/api/workspaces",
+            get(list_workspaces).post(create_workspace),
+        )
+        .route(
+            "/api/workspaces/{id}",
+            put(rename_workspace).delete(delete_workspace),
+        )
         .route(
             "/api/workspaces/{id}/members",
             get(list_members).post(invite_member),
@@ -231,7 +281,10 @@ pub fn router() -> Router<AppState> {
             "/api/workspaces/{id}/members/{user}",
             put(set_member_role).delete(remove_member),
         )
-        .route("/api/workspaces/{id}/overlay-token", post(mint_overlay_token))
+        .route(
+            "/api/workspaces/{id}/overlay-token",
+            post(mint_overlay_token),
+        )
         .layer(middleware::from_fn(csrf_guard))
 }
 
@@ -530,6 +583,83 @@ mod tests {
                 "POST",
                 &format!("/api/workspaces/{}/overlay-token", ws.0),
                 &viewer_cookie,
+                "",
+            ))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::FORBIDDEN);
+    }
+
+    #[tokio::test]
+    async fn the_owner_renames_then_deletes_a_workspace() {
+        let (_c, _tmp, state, pool) = cloud().await;
+        let cloud = state.cloud.clone().unwrap();
+        let owner = seed_user(&pool).await;
+        let owner_cookie = cloud.sessions.create(owner).await.unwrap().token;
+        let ws = cloud
+            .workspaces
+            .create_with_owner(owner, "Old")
+            .await
+            .unwrap();
+
+        let resp = build_app(state.clone(), None)
+            .oneshot(req(
+                "PUT",
+                &format!("/api/workspaces/{}", ws.0),
+                &owner_cookie,
+                r#"{"name":"New"}"#,
+            ))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::NO_CONTENT);
+        let name: String = sqlx::query_scalar("select name from workspace where id = $1")
+            .bind(ws.0)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(name, "New");
+
+        let resp = build_app(state.clone(), None)
+            .oneshot(req(
+                "DELETE",
+                &format!("/api/workspaces/{}", ws.0),
+                &owner_cookie,
+                "",
+            ))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::NO_CONTENT);
+        let count: i64 = sqlx::query_scalar("select count(*) from workspace where id = $1")
+            .bind(ws.0)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(count, 0, "the workspace row is gone");
+    }
+
+    #[tokio::test]
+    async fn a_non_owner_cannot_delete_a_workspace() {
+        let (_c, _tmp, state, pool) = cloud().await;
+        let cloud = state.cloud.clone().unwrap();
+        let owner = seed_user(&pool).await;
+        let ws = cloud
+            .workspaces
+            .create_with_owner(owner, "W")
+            .await
+            .unwrap();
+        let editor = seed_user_with_email(&pool, "e@example.com").await;
+        cloud
+            .workspaces
+            .add_member_by_email(ws, "e@example.com", Role::Editor)
+            .await
+            .unwrap();
+        let editor_cookie = cloud.sessions.create(editor).await.unwrap().token;
+
+        let resp = build_app(state.clone(), None)
+            .oneshot(req(
+                "DELETE",
+                &format!("/api/workspaces/{}", ws.0),
+                &editor_cookie,
                 "",
             ))
             .await

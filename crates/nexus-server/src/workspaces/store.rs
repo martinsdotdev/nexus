@@ -256,6 +256,28 @@ impl WorkspaceStore {
             .await?;
         Ok((done.rows_affected() > 0).then_some(()))
     }
+
+    /// Rename a workspace. Returns `None` if no workspace has that id (→ 404).
+    pub async fn rename(&self, workspace: WorkspaceId, name: &str) -> sqlx::Result<Option<()>> {
+        let done = sqlx::query("update workspace set name = $1 where id = $2")
+            .bind(name)
+            .bind(workspace.0)
+            .execute(&self.pool)
+            .await?;
+        Ok((done.rows_affected() > 0).then_some(()))
+    }
+
+    /// Delete a workspace and everything that hangs off it. The `membership` and
+    /// `overlay_token` foreign keys cascade, and the Loro snapshot lives in the row, so a
+    /// single delete removes the child rows + the snapshot together. Returns `None` if the
+    /// workspace was already gone (→ 404).
+    pub async fn delete(&self, workspace: WorkspaceId) -> sqlx::Result<Option<()>> {
+        let done = sqlx::query("delete from workspace where id = $1")
+            .bind(workspace.0)
+            .execute(&self.pool)
+            .await?;
+        Ok((done.rows_affected() > 0).then_some(()))
+    }
 }
 
 #[cfg(test)]
@@ -540,5 +562,91 @@ mod tests {
         assert_eq!(store.remove_member(ws, member).await.unwrap(), Some(()));
         assert_eq!(store.membership(member, ws).await.unwrap(), None);
         assert_eq!(store.remove_member(ws, member).await.unwrap(), None);
+    }
+
+    #[tokio::test]
+    async fn rename_changes_the_name_or_reports_missing() {
+        let (_c, pool) = fresh_db().await;
+        let store = WorkspaceStore::new(pool.clone());
+        let owner = seed_user(&pool).await;
+        let ws = store.create_with_owner(owner, "Old").await.unwrap();
+
+        assert_eq!(store.rename(ws, "New").await.unwrap(), Some(()));
+        let name: String = sqlx::query_scalar("select name from workspace where id = $1")
+            .bind(ws.0)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(name, "New");
+
+        assert_eq!(
+            store
+                .rename(WorkspaceId(Uuid::new_v4()), "X")
+                .await
+                .unwrap(),
+            None,
+            "renaming a missing workspace reports None"
+        );
+    }
+
+    #[tokio::test]
+    async fn delete_removes_the_workspace_and_cascades_children() {
+        let (_c, pool) = fresh_db().await;
+        let store = WorkspaceStore::new(pool.clone());
+        let owner = seed_user_with_email(&pool, "o@example.com").await;
+        let ws = store.create_with_owner(owner, "Doomed").await.unwrap();
+        let member = seed_user_with_email(&pool, "m@example.com").await;
+        store
+            .add_member_by_email(ws, "m@example.com", Role::Editor)
+            .await
+            .unwrap();
+        sqlx::query(
+            "insert into overlay_token (id, secret_hash, workspace_id) values ($1, $2, $3)",
+        )
+        .bind("tok-1")
+        .bind(vec![1u8, 2, 3])
+        .bind(ws.0)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        assert_eq!(store.delete(ws).await.unwrap(), Some(()));
+
+        let workspaces: i64 = sqlx::query_scalar("select count(*) from workspace where id = $1")
+            .bind(ws.0)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        let members: i64 =
+            sqlx::query_scalar("select count(*) from membership where workspace_id = $1")
+                .bind(ws.0)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        let tokens: i64 =
+            sqlx::query_scalar("select count(*) from overlay_token where workspace_id = $1")
+                .bind(ws.0)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(
+            (workspaces, members, tokens),
+            (0, 0, 0),
+            "the workspace row and its children all cascade away"
+        );
+
+        // The accounts themselves survive; only the workspace and its rows are removed.
+        let users: i64 = sqlx::query_scalar("select count(*) from app_user where id = any($1)")
+            .bind(vec![owner, member])
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(users, 2, "members keep their accounts");
+
+        assert_eq!(
+            store.delete(ws).await.unwrap(),
+            None,
+            "a second delete is None"
+        );
     }
 }

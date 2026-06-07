@@ -1,6 +1,7 @@
 <script lang="ts">
 	// The workspace picker (cloud mode): lists the workspaces the signed-in user belongs
-	// to and opens one in the editor (/edit?workspace=<id>), or creates a new one. A 401
+	// to and opens one in the editor (/edit?workspace=<id>), or creates a new one. Owners
+	// can also rename a workspace inline or delete it behind a type-the-name confirm. A 401
 	// means the session lapsed, so we send the user back to sign in.
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
@@ -71,6 +72,69 @@
 			}
 		}
 	}));
+
+	// Owner-only per-row actions: inline rename, and delete behind a type-the-name confirm.
+	let editingId = $state<string | null>(null);
+	let editValue = $state('');
+	let confirmingId = $state<string | null>(null);
+	let confirmValue = $state('');
+
+	function focusSoon(node: HTMLInputElement) {
+		const timer = setTimeout(() => {
+			node.focus();
+			node.select();
+		});
+		return { destroy: () => clearTimeout(timer) };
+	}
+
+	function startRename(ws: Workspace) {
+		editValue = ws.name;
+		editingId = ws.id;
+	}
+
+	async function commitRename() {
+		const id = editingId;
+		editingId = null;
+		if (!id) return;
+		const name = editValue.trim();
+		const current = workspaces?.find((w) => w.id === id);
+		if (!name || !current || name === current.name) return;
+		try {
+			const res = await fetch(`/api/workspaces/${id}`, {
+				method: 'PUT',
+				headers: { 'content-type': 'application/json' },
+				credentials: 'include',
+				body: JSON.stringify({ name })
+			});
+			if (res.ok) {
+				workspaces = (workspaces ?? []).map((w) => (w.id === id ? { ...w, name } : w));
+				toast.success(m['workspaces.renamed']());
+			} else {
+				toast.error(m['workspaces.error_load']());
+			}
+		} catch {
+			toast.error(m['workspaces.error_network']());
+		}
+	}
+
+	async function deleteWorkspace(id: string) {
+		confirmingId = null;
+		confirmValue = '';
+		try {
+			const res = await fetch(`/api/workspaces/${id}`, {
+				method: 'DELETE',
+				credentials: 'include'
+			});
+			if (res.ok) {
+				workspaces = (workspaces ?? []).filter((w) => w.id !== id);
+				toast.success(m['workspaces.deleted']());
+			} else {
+				toast.error(m['workspaces.error_load']());
+			}
+		} catch {
+			toast.error(m['workspaces.error_network']());
+		}
+	}
 </script>
 
 <svelte:head><title>{m['workspaces.title']()}</title></svelte:head>
@@ -91,11 +155,71 @@
 		{:else}
 			<ul class="list">
 				{#each workspaces as ws (ws.id)}
-					<li>
-						<button class="row" onclick={() => openWorkspace(ws.id)}>
-							<span class="name">{ws.name}</span>
-							<span class="role">{ws.role}</span>
-						</button>
+					<li class="row">
+						{#if editingId === ws.id}
+							<input
+								class="rename"
+								aria-label={m['workspaces.rename_label']()}
+								bind:value={editValue}
+								use:focusSoon
+								onblur={commitRename}
+								onkeydown={(event) => {
+									if (event.key === 'Enter') {
+										event.preventDefault();
+										commitRename();
+									} else if (event.key === 'Escape') {
+										event.preventDefault();
+										editingId = null;
+									}
+								}}
+							/>
+						{:else if confirmingId === ws.id}
+							<div class="confirm">
+								<label class="confirm-field">
+									<span>{m['workspaces.delete_prompt']()}</span>
+									<input
+										aria-label={m['workspaces.confirm_name_label']()}
+										placeholder={ws.name}
+										bind:value={confirmValue}
+										use:focusSoon
+									/>
+								</label>
+								<div class="confirm-actions">
+									<button
+										type="button"
+										class="danger"
+										disabled={confirmValue !== ws.name}
+										onclick={() => deleteWorkspace(ws.id)}
+									>
+										{m['workspaces.delete']()}
+									</button>
+									<button
+										type="button"
+										onclick={() => {
+											confirmingId = null;
+											confirmValue = '';
+										}}
+									>
+										{m['workspaces.cancel']()}
+									</button>
+								</div>
+							</div>
+						{:else}
+							<button class="open" type="button" onclick={() => openWorkspace(ws.id)}>
+								<span class="name">{ws.name}</span>
+								<span class="role">{ws.role}</span>
+							</button>
+							{#if ws.role === 'owner'}
+								<div class="row-actions">
+									<button type="button" onclick={() => startRename(ws)}>
+										{m['workspaces.rename']()}
+									</button>
+									<button type="button" class="danger" onclick={() => (confirmingId = ws.id)}>
+										{m['workspaces.delete']()}
+									</button>
+								</div>
+							{/if}
+						{/if}
 					</li>
 				{/each}
 			</ul>
@@ -194,8 +318,15 @@
 	.row {
 		display: flex;
 		align-items: center;
+		gap: var(--space-2);
+	}
+
+	.open {
+		flex: 1;
+		display: flex;
+		align-items: center;
 		justify-content: space-between;
-		width: 100%;
+		min-width: 0;
 		padding: var(--space-3);
 		border-radius: var(--radius-md);
 		background: var(--muted);
@@ -203,16 +334,112 @@
 		font-size: var(--text-base);
 		border: var(--stroke-thin) solid transparent;
 		transition: border-color var(--dur-fast) var(--ease-out);
+		cursor: pointer;
 	}
 
-	.row:hover {
+	.open:hover {
 		border-color: var(--border);
+	}
+
+	.name {
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
 	}
 
 	.role {
 		font-size: var(--text-xs);
 		color: var(--muted-foreground);
 		text-transform: capitalize;
+	}
+
+	.row-actions {
+		display: flex;
+		gap: var(--space-1);
+		flex: none;
+	}
+
+	.row-actions button {
+		font: inherit;
+		font-size: var(--text-xs);
+		padding: var(--space-1) var(--space-2);
+		border-radius: var(--radius-md);
+		border: var(--stroke-thin) solid var(--border);
+		background: var(--secondary);
+		color: var(--secondary-foreground);
+		cursor: pointer;
+	}
+
+	.rename {
+		flex: 1;
+		padding: var(--space-3);
+		border-radius: var(--radius-md);
+		border: var(--stroke-thin) solid var(--border);
+		background: var(--input);
+		color: var(--foreground);
+		font: inherit;
+		font-size: var(--text-base);
+	}
+
+	.rename:focus-visible,
+	.confirm input:focus-visible {
+		outline: none;
+		box-shadow: var(--focus-ring);
+	}
+
+	.confirm {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-2);
+		width: 100%;
+		padding: var(--space-3);
+		border-radius: var(--radius-md);
+		background: var(--muted);
+		border: var(--stroke-thin) solid var(--border);
+	}
+
+	.confirm-field {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-1);
+		font-size: var(--text-xs);
+		color: var(--muted-foreground);
+	}
+
+	.confirm-field input {
+		padding: var(--space-2);
+		border-radius: var(--radius-sm);
+		border: var(--stroke-thin) solid var(--border);
+		background: var(--input);
+		color: var(--foreground);
+		font: inherit;
+		font-size: var(--text-sm);
+	}
+
+	.confirm-actions {
+		display: flex;
+		gap: var(--space-2);
+		justify-content: flex-end;
+	}
+
+	.confirm-actions button {
+		font: inherit;
+		font-size: var(--text-sm);
+		padding: var(--space-1) var(--space-3);
+		border-radius: var(--radius-md);
+		border: var(--stroke-thin) solid var(--border);
+		background: var(--secondary);
+		color: var(--secondary-foreground);
+		cursor: pointer;
+	}
+
+	.danger {
+		color: var(--destructive);
+	}
+
+	.confirm-actions .danger:disabled {
+		opacity: 0.5;
+		cursor: default;
 	}
 
 	.create-form {

@@ -50,6 +50,13 @@ impl WorkspaceRegistry {
         }
     }
 
+    /// Forcibly drop a workspace's live runtime, used when the workspace is deleted. Any
+    /// session still holding the `Arc` keeps running until it disconnects; a fresh join is
+    /// already barred by the deleted membership, so the gone workspace is never reloaded.
+    pub async fn evict(&self, id: WorkspaceId) {
+        self.live.lock().await.remove(&id);
+    }
+
     #[cfg(test)]
     async fn live_count(&self) -> usize {
         self.live.lock().await.len()
@@ -130,5 +137,24 @@ mod tests {
             "different workspaces, different runtimes"
         );
         assert_eq!(registry.live_count().await, 2);
+    }
+
+    #[tokio::test]
+    async fn evict_drops_the_runtime_even_with_a_live_subscriber() {
+        let dir = tempfile::tempdir().unwrap();
+        let registry = local_registry(dir.path());
+        let runtime = registry.acquire(WorkspaceId::LOCAL).await.unwrap();
+        let _session = runtime.subscribe();
+
+        // release keeps it resident while a session is live; evict drops it outright.
+        registry.release(WorkspaceId::LOCAL).await;
+        assert_eq!(registry.live_count().await, 1);
+        registry.evict(WorkspaceId::LOCAL).await;
+        assert_eq!(
+            registry.live_count().await,
+            0,
+            "evicted despite the live subscriber"
+        );
+        drop(runtime);
     }
 }
