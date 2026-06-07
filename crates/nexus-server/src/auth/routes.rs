@@ -10,7 +10,7 @@ use axum::extract::{FromRequestParts, Path, Request, State};
 use axum::http::{HeaderMap, StatusCode, request::Parts};
 use axum::middleware::{self, Next};
 use axum::response::{Json, Response};
-use axum::routing::{delete, get, post};
+use axum::routing::{delete, get, post, put};
 use axum_extra::extract::CookieJar;
 use axum_extra::extract::cookie::{Cookie, SameSite};
 use serde::{Deserialize, Serialize};
@@ -84,12 +84,16 @@ async fn me(
     CurrentUser(user): CurrentUser,
 ) -> Result<Json<Me>, StatusCode> {
     let cloud = state.cloud.as_ref().ok_or(StatusCode::UNAUTHORIZED)?;
-    let display = cloud
-        .emails
-        .display_handle(user.id)
-        .await
-        .map_err(internal)?
-        .unwrap_or_else(|| "Anonymous".to_string());
+    // Prefer the user's chosen display name; fall back to the email local-part.
+    let display = match cloud.emails.display_name(user.id).await.map_err(internal)? {
+        Some(name) => name,
+        None => cloud
+            .emails
+            .display_handle(user.id)
+            .await
+            .map_err(internal)?
+            .unwrap_or_else(|| "Anonymous".to_string()),
+    };
     Ok(Json(Me {
         user_id: user.id.to_string(),
         display,
@@ -196,6 +200,45 @@ fn device_hints(headers: &HeaderMap) -> (Option<String>, Option<String>) {
         .and_then(|xff| xff.split(',').next())
         .map(|first| first.trim().to_string());
     (user_agent, ip)
+}
+
+#[derive(Deserialize)]
+struct ProfileUpdate {
+    display_name: String,
+}
+
+/// `PUT /auth/profile`: set the caller's display name (an empty value clears it back to the
+/// email local-part). The name shows in presence and the collaborator roster.
+async fn update_profile(
+    State(state): State<AppState>,
+    CurrentUser(user): CurrentUser,
+    Json(body): Json<ProfileUpdate>,
+) -> Result<StatusCode, StatusCode> {
+    let cloud = state.cloud.as_ref().ok_or(StatusCode::UNAUTHORIZED)?;
+    cloud
+        .emails
+        .set_display_name(user.id, &body.display_name)
+        .await
+        .map_err(internal)?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+/// `DELETE /auth/account`: cascade-delete the account (ADR-0010). Every workspace the user
+/// owns is deleted first (rows + snapshot + live runtime), then the account itself, whose
+/// sessions, memberships, and email identities cascade away. Clears the cookie. Irreversible.
+async fn delete_account(
+    State(state): State<AppState>,
+    CurrentUser(user): CurrentUser,
+    jar: CookieJar,
+) -> Result<(CookieJar, StatusCode), StatusCode> {
+    let cloud = state.cloud.as_ref().ok_or(StatusCode::UNAUTHORIZED)?;
+    for workspace in cloud.workspaces.owned_by(user.id).await.map_err(internal)? {
+        cloud.workspaces.delete(workspace).await.map_err(internal)?;
+        state.registry.evict(workspace).await;
+    }
+    cloud.emails.delete_user(user.id).await.map_err(internal)?;
+    let cleared = jar.remove(Cookie::build((COOKIE_NAME, "")).path("/").build());
+    Ok((cleared, StatusCode::NO_CONTENT))
 }
 
 #[derive(Deserialize)]
@@ -340,6 +383,8 @@ pub fn router() -> Router<AppState> {
     Router::new()
         .route("/auth/me", get(me))
         .route("/auth/logout", post(logout))
+        .route("/auth/profile", put(update_profile))
+        .route("/auth/account", delete(delete_account))
         .route("/auth/sessions", get(list_sessions))
         .route("/auth/sessions/logout-others", post(logout_others))
         .route("/auth/sessions/{id}", delete(revoke_session))
@@ -671,5 +716,87 @@ mod tests {
         assert_eq!(resp.status(), StatusCode::NO_CONTENT);
         assert!(store.validate(&extra.token).await.unwrap().is_none());
         assert!(store.validate(&current.token).await.unwrap().is_some());
+    }
+
+    #[tokio::test]
+    async fn profile_update_and_cascade_account_delete() {
+        let (_c, _tmp, state, pool, _mail) = cloud_app().await;
+        let cloud = state.cloud.clone().unwrap();
+        let issued = cloud.emails.issue("dev@example.com").await.unwrap();
+        let VerifyOutcome::Verified(user) = cloud
+            .emails
+            .verify(&issued.request_id, &issued.code)
+            .await
+            .unwrap()
+        else {
+            panic!("verify provisions the user");
+        };
+        let session = cloud.sessions.create(user).await.unwrap();
+        let cookie = format!("{COOKIE_NAME}={}", session.token);
+        let ws = cloud
+            .workspaces
+            .create_with_owner(user, "Mine")
+            .await
+            .unwrap();
+
+        // PUT /auth/profile sets the display name.
+        let resp = build_app(state.clone(), None)
+            .oneshot(
+                HttpRequest::builder()
+                    .method("PUT")
+                    .uri("/auth/profile")
+                    .header("content-type", "application/json")
+                    .header("sec-fetch-site", "same-origin")
+                    .header("cookie", &cookie)
+                    .body(Body::from(r#"{"display_name":"Dev Streamer"}"#))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::NO_CONTENT);
+        assert_eq!(
+            cloud.emails.display_name(user).await.unwrap().as_deref(),
+            Some("Dev Streamer")
+        );
+
+        // DELETE /auth/account cascades: the owned workspace and the account both go.
+        let resp = build_app(state.clone(), None)
+            .oneshot(
+                HttpRequest::builder()
+                    .method("DELETE")
+                    .uri("/auth/account")
+                    .header("sec-fetch-site", "same-origin")
+                    .header("cookie", &cookie)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::NO_CONTENT);
+
+        let users: i64 = sqlx::query_scalar("select count(*) from app_user where id = $1")
+            .bind(user)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        let workspaces: i64 = sqlx::query_scalar("select count(*) from workspace where id = $1")
+            .bind(ws.0)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(
+            (users, workspaces),
+            (0, 0),
+            "account + owned workspace cascade away"
+        );
+        // The session cascaded with the account, so the token no longer validates.
+        assert!(
+            cloud
+                .sessions
+                .validate(&session.token)
+                .await
+                .unwrap()
+                .is_none()
+        );
     }
 }

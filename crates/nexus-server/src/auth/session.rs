@@ -142,7 +142,6 @@ impl SessionStore {
         .await
     }
 
-
     /// Revoke one of `user_id`'s sessions by id. Scoped to the user so a token can only end
     /// its own account's sessions. Returns `None` if no such session belongs to them (→ 404).
     pub async fn invalidate_for_user(&self, user_id: Uuid, id: &str) -> sqlx::Result<Option<()>> {

@@ -21,9 +21,29 @@
 	let sessions = $state<Session[] | null>(null);
 	let error = $state<string | null>(null);
 
+	// Profile (display name) + the type-the-name confirm for deleting the account.
+	let display = $state('');
+	let nameInput = $state('');
+	let saving = $state(false);
+	let confirmInput = $state('');
+
 	$effect(() => {
 		void loadSessions();
+		void loadMe();
 	});
+
+	async function loadMe() {
+		try {
+			const res = await fetch('/auth/me', { credentials: 'include' });
+			if (res.ok) {
+				const me = (await res.json()) as { display: string };
+				display = me.display;
+				nameInput = me.display;
+			}
+		} catch {
+			// Non-fatal; the sessions load already surfaces connectivity errors.
+		}
+	}
 
 	async function loadSessions() {
 		try {
@@ -82,6 +102,41 @@
 	}
 
 	const hasOthers = $derived((sessions ?? []).some((s) => !s.current));
+
+	async function saveProfile() {
+		saving = true;
+		try {
+			const res = await fetch('/auth/profile', {
+				method: 'PUT',
+				headers: { 'content-type': 'application/json' },
+				credentials: 'include',
+				body: JSON.stringify({ display_name: nameInput.trim() })
+			});
+			if (res.ok) {
+				await loadMe();
+				toast.success(m['account.profile_saved']());
+			} else {
+				toast.error(m['account.error']());
+			}
+		} catch {
+			toast.error(m['account.error']());
+		} finally {
+			saving = false;
+		}
+	}
+
+	async function deleteAccount() {
+		try {
+			const res = await fetch('/auth/account', { method: 'DELETE', credentials: 'include' });
+			if (res.ok) {
+				goto(resolve('/login'));
+			} else {
+				toast.error(m['account.error']());
+			}
+		} catch {
+			toast.error(m['account.error']());
+		}
+	}
 </script>
 
 <svelte:head><title>{m['account.title']()}</title></svelte:head>
@@ -127,6 +182,38 @@
 					</button>
 				{/if}
 			{/if}
+		</section>
+
+		<section class="block" aria-label={m['account.profile_title']()}>
+			<h2 class="block-title">{m['account.profile_title']()}</h2>
+			<label class="field">
+				<span>{m['account.display_name_label']()}</span>
+				<input bind:value={nameInput} placeholder={display} />
+			</label>
+			<button type="button" class="save" disabled={saving} onclick={saveProfile}>
+				{saving ? m['account.saving']() : m['account.save']()}
+			</button>
+		</section>
+
+		<section class="block danger-zone" aria-label={m['account.danger_title']()}>
+			<h2 class="block-title danger">{m['account.danger_title']()}</h2>
+			<p class="warning">{m['account.delete_warning']()}</p>
+			<label class="field">
+				<span>{m['account.delete_confirm_prompt']()} ({display})</span>
+				<input
+					aria-label={m['account.confirm_label']()}
+					bind:value={confirmInput}
+					placeholder={display}
+				/>
+			</label>
+			<button
+				type="button"
+				class="delete-account"
+				disabled={confirmInput.trim() !== display}
+				onclick={deleteAccount}
+			>
+				{m['account.delete_account']()}
+			</button>
 		</section>
 	</section>
 </main>
@@ -261,6 +348,81 @@
 		background: var(--secondary);
 		color: var(--secondary-foreground);
 		cursor: pointer;
+	}
+
+	.field {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-1);
+		font-size: var(--text-xs);
+		color: var(--muted-foreground);
+		margin-bottom: var(--space-3);
+	}
+
+	.field input {
+		padding: var(--space-2);
+		border-radius: var(--radius-md);
+		border: var(--stroke-thin) solid var(--border);
+		background: var(--input);
+		color: var(--foreground);
+		font: inherit;
+		font-size: var(--text-sm);
+	}
+
+	.field input:focus-visible {
+		outline: none;
+		box-shadow: var(--focus-ring);
+	}
+
+	.save {
+		font: inherit;
+		font-size: var(--text-sm);
+		font-weight: 600;
+		padding: var(--space-2) var(--space-4);
+		border-radius: var(--radius-md);
+		background: var(--primary);
+		color: var(--primary-foreground);
+		cursor: pointer;
+	}
+
+	.save:disabled {
+		opacity: 0.6;
+		cursor: default;
+	}
+
+	.danger-zone {
+		border: var(--stroke-thin) solid var(--destructive);
+		border-radius: var(--radius-md);
+		padding: var(--space-4);
+	}
+
+	.block-title.danger {
+		color: var(--destructive);
+	}
+
+	.warning {
+		margin: 0 0 var(--space-3);
+		font-size: var(--text-sm);
+		color: var(--muted-foreground);
+	}
+
+	.delete-account {
+		font: inherit;
+		font-size: var(--text-sm);
+		font-weight: 600;
+		padding: var(--space-2) var(--space-4);
+		border-radius: var(--radius-md);
+		border: var(--stroke-thin) solid var(--destructive);
+		background: var(--destructive);
+		color: var(--primary-foreground);
+		cursor: pointer;
+	}
+
+	.delete-account:disabled {
+		opacity: 0.5;
+		cursor: default;
+		background: transparent;
+		color: var(--destructive);
 	}
 
 	.error {

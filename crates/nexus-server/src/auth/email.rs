@@ -143,7 +143,7 @@ impl EmailStore {
     }
 
     /// A human display handle for the user: the local-part of their first verified email
-    /// (until OAuth supplies a real display name). Used for presence and the roster.
+    /// (the fallback when no display name is set). Used for presence and the roster.
     pub async fn display_handle(&self, user_id: Uuid) -> sqlx::Result<Option<String>> {
         let row: Option<(String,)> =
             sqlx::query_as("select email from email_identity where user_id = $1 limit 1")
@@ -151,6 +151,42 @@ impl EmailStore {
                 .fetch_optional(&self.pool)
                 .await?;
         Ok(row.map(|(email,)| email.split('@').next().unwrap_or(&email).to_string()))
+    }
+
+    /// The user-chosen display name (account profile), or `None` if unset (the email
+    /// local-part from `display_handle` is then the fallback).
+    pub async fn display_name(&self, user_id: Uuid) -> sqlx::Result<Option<String>> {
+        let row: Option<(Option<String>,)> =
+            sqlx::query_as("select display_name from app_user where id = $1")
+                .bind(user_id)
+                .fetch_optional(&self.pool)
+                .await?;
+        Ok(row.and_then(|(name,)| name))
+    }
+
+    /// Set the user's display name; an empty/blank value clears it back to NULL (the email
+    /// local-part fallback).
+    pub async fn set_display_name(&self, user_id: Uuid, name: &str) -> sqlx::Result<()> {
+        let trimmed = name.trim();
+        let value = (!trimmed.is_empty()).then_some(trimmed);
+        sqlx::query("update app_user set display_name = $1 where id = $2")
+            .bind(value)
+            .bind(user_id)
+            .execute(&self.pool)
+            .await?;
+        Ok(())
+    }
+
+    /// Delete the account. The `session`, `membership`, and `email_identity` foreign keys
+    /// cascade off `app_user`, so this removes the user's sessions, memberships, and email
+    /// identities together. Workspaces the user owns are deleted first by the caller (those
+    /// rows do not cascade from `app_user`).
+    pub async fn delete_user(&self, user_id: Uuid) -> sqlx::Result<()> {
+        sqlx::query("delete from app_user where id = $1")
+            .bind(user_id)
+            .execute(&self.pool)
+            .await?;
+        Ok(())
     }
 
     /// Find the account for `email`, or create one (auto-provision). Done in a transaction
@@ -387,5 +423,50 @@ mod tests {
             store.verify("no-such-request", "WHATEVER1").await.unwrap(),
             VerifyOutcome::Invalid
         );
+    }
+
+    #[tokio::test]
+    async fn display_name_round_trips_and_account_deletes() {
+        let (_c, pool) = fresh_db().await;
+        let store = EmailStore::new(pool.clone());
+        let issued = store.issue("nina@example.com").await.unwrap();
+        let VerifyOutcome::Verified(user) = store
+            .verify(&issued.request_id, &issued.code)
+            .await
+            .unwrap()
+        else {
+            panic!("verify should provision the account");
+        };
+
+        // Unset by default; the handle falls back to the email local-part.
+        assert_eq!(store.display_name(user).await.unwrap(), None);
+        assert_eq!(
+            store.display_handle(user).await.unwrap().as_deref(),
+            Some("nina")
+        );
+
+        // Set (trimmed), then clear with a blank.
+        store.set_display_name(user, "  Nina Live  ").await.unwrap();
+        assert_eq!(
+            store.display_name(user).await.unwrap().as_deref(),
+            Some("Nina Live")
+        );
+        store.set_display_name(user, "   ").await.unwrap();
+        assert_eq!(store.display_name(user).await.unwrap(), None);
+
+        // Delete the account: the user and its email identity cascade away.
+        store.delete_user(user).await.unwrap();
+        let users: i64 = sqlx::query_scalar("select count(*) from app_user where id = $1")
+            .bind(user)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        let identities: i64 =
+            sqlx::query_scalar("select count(*) from email_identity where user_id = $1")
+                .bind(user)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!((users, identities), (0, 0), "account + identity are gone");
     }
 }

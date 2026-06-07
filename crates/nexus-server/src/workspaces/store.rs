@@ -278,6 +278,19 @@ impl WorkspaceStore {
             .await?;
         Ok((done.rows_affected() > 0).then_some(()))
     }
+
+    /// The ids of every workspace `user_id` owns. Account deletion removes these (their
+    /// members + tokens cascade) along with the account; the rows do not cascade from
+    /// `app_user`, so the caller deletes them explicitly first.
+    pub async fn owned_by(&self, user_id: Uuid) -> sqlx::Result<Vec<WorkspaceId>> {
+        let rows: Vec<(Uuid,)> = sqlx::query_as(
+            "select workspace_id from membership where user_id = $1 and role = 'owner'",
+        )
+        .bind(user_id)
+        .fetch_all(&self.pool)
+        .await?;
+        Ok(rows.into_iter().map(|(id,)| WorkspaceId(id)).collect())
+    }
 }
 
 #[cfg(test)]
