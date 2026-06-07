@@ -6,6 +6,7 @@ import {
 	createLayout,
 	createScene,
 	createWidget,
+	deleteLayout,
 	deleteScene,
 	deleteWidget,
 	duplicateLayout,
@@ -96,6 +97,30 @@ describe('layouts', () => {
 		archiveLayout(doc, id);
 		doc.commit();
 		expect(readWorkspace(doc).layouts.find((l) => l.id === id)!.status).toBe('archived');
+	});
+
+	test('deleteLayout removes a layout and re-points the active one to a survivor', () => {
+		const { doc } = buildFixture();
+		const original = readWorkspace(doc).layouts[0].id;
+		const second = createLayout(doc, 'Second');
+		activateLayout(doc, second);
+		doc.commit();
+
+		deleteLayout(doc, second);
+		doc.commit();
+
+		const ws = readWorkspace(doc);
+		expect(ws.layouts).toHaveLength(1);
+		expect(ws.layouts[0].id).toBe(original);
+		expect(ws.activeLayoutId).toBe(original);
+	});
+
+	test('deleteLayout refuses to remove the workspace last layout', () => {
+		const { doc } = buildFixture();
+		const only = readWorkspace(doc).layouts[0].id;
+		deleteLayout(doc, only);
+		doc.commit();
+		expect(readWorkspace(doc).layouts).toHaveLength(1);
 	});
 });
 

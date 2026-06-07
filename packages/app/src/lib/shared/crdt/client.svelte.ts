@@ -76,6 +76,8 @@ export interface WorkspaceClient {
 	duplicateLayout(id: string, name: string): string | undefined;
 	archiveLayout(id: string): void;
 	activateLayout(id: string): void;
+	/** Delete a layout; refused for the workspace's last one, re-points active first. */
+	deleteLayout(id: string): void;
 	/** Enter draft mode: fork the live doc; edits stay private until publish. */
 	enterDraft(): void;
 	/** Merge the draft into live (broadcasts to the relay + overlay) and return to live. */
@@ -278,6 +280,9 @@ export function createWorkspaceClient(
 		},
 		activateLayout(id) {
 			tx((doc) => mutate.activateLayout(doc, id));
+		},
+		deleteLayout(id) {
+			tx((doc) => mutate.deleteLayout(doc, id));
 		},
 		enterDraft() {
 			if (mode === 'draft') return;

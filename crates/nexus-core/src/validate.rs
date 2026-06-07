@@ -42,6 +42,9 @@ pub enum Repair {
         theme_id: String,
         reason: String,
     },
+    /// Reset the workspace's `activeLayoutId` when it names a layout that no
+    /// longer exists (e.g. the active layout was deleted).
+    SetActiveLayout { layout_id: String, reason: String },
 }
 
 /// Check the merged read model and return the corrective ops needed to restore
@@ -97,6 +100,27 @@ pub fn validate(ws: &Workspace) -> Vec<Repair> {
         }
     }
 
+    // Repairable: the active layout id must name a layout that still exists; if it
+    // names none (e.g. the active layout was deleted), reset to the first active
+    // layout, or the first layout if all happen to be archived.
+    if !ws
+        .layouts
+        .iter()
+        .any(|layout| layout.id == ws.active_layout_id)
+    {
+        let fallback = ws
+            .layouts
+            .iter()
+            .find(|layout| layout.status != "archived")
+            .or_else(|| ws.layouts.first())
+            .map(|layout| layout.id.clone())
+            .unwrap_or_default();
+        repairs.push(Repair::SetActiveLayout {
+            layout_id: fallback,
+            reason: "active layout missing; reset to first".into(),
+        });
+    }
+
     repairs
 }
 
@@ -132,6 +156,10 @@ pub fn apply_repairs(doc: &LoroDoc, repairs: &[Repair]) -> loro::LoroResult<()> 
                         }
                     }
                 }
+            }
+            Repair::SetActiveLayout { layout_id, .. } => {
+                doc.get_map(schema::WORKSPACE)
+                    .insert("activeLayoutId", layout_id.clone())?;
             }
         }
     }
@@ -292,6 +320,49 @@ mod tests {
 
         let ws = read_workspace(&doc);
         assert_eq!(ws.layouts[0].scenes[0].theme_id, "cozy", "reset to default");
+        assert!(validate(&ws).is_empty(), "no residual violations");
+    }
+
+    #[test]
+    fn missing_active_layout_is_repaired_to_first() {
+        // The active layout id names no existing layout (e.g. it was deleted).
+        let ws = Workspace {
+            active_layout_id: "ghost".into(),
+            layouts: vec![layout("active", "s0")],
+            themes: Vec::new(),
+        };
+        let found = validate(&ws).into_iter().find_map(|repair| match repair {
+            Repair::SetActiveLayout { layout_id, .. } => Some(layout_id),
+            _ => None,
+        });
+        assert_eq!(found, Some("L".into()), "reset to the surviving layout");
+    }
+
+    #[test]
+    fn apply_repairs_fixes_missing_active_layout() {
+        let doc = LoroDoc::new();
+        build_default(&doc).unwrap();
+
+        // Corrupt: point the workspace at a layout id that does not exist.
+        doc.get_map(schema::WORKSPACE)
+            .insert("activeLayoutId", "ghost")
+            .unwrap();
+        doc.commit();
+
+        let repairs = validate(&read_workspace(&doc));
+        assert!(
+            repairs
+                .iter()
+                .any(|repair| matches!(repair, Repair::SetActiveLayout { .. })),
+            "the missing active layout is detected"
+        );
+        apply_repairs(&doc, &repairs).unwrap();
+
+        let ws = read_workspace(&doc);
+        assert_eq!(
+            ws.active_layout_id, ws.layouts[0].id,
+            "repaired to the real layout"
+        );
         assert!(validate(&ws).is_empty(), "no residual violations");
     }
 

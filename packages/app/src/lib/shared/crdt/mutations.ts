@@ -149,6 +149,21 @@ export function activateLayout(doc: LoroDoc, id: string): void {
 	doc.getMap(WORKSPACE).set('activeLayoutId', id);
 }
 
+/** Delete a layout (and its scenes + widgets). Refuses to remove the workspace's only
+ *  layout, and re-points `activeLayoutId` to a surviving layout (an active one when
+ *  possible) first if the deleted layout was active, so the pointer never dangles. */
+export function deleteLayout(doc: LoroDoc, id: string): void {
+	const tree = doc.getTree(TREE);
+	const survivors = tree.roots().filter((node) => String(node.id) !== id);
+	if (survivors.length === 0) return; // a workspace keeps at least one layout
+	const workspace = doc.getMap(WORKSPACE);
+	if (String(workspace.get('activeLayoutId')) === id) {
+		const next = survivors.find((node) => node.data.get('status') !== 'archived') ?? survivors[0];
+		workspace.set('activeLayoutId', String(next.id));
+	}
+	tree.delete(id as TreeID);
+}
+
 export function setSceneTheme(doc: LoroDoc, sceneId: string, themeId: string): void {
 	nodeById(doc, sceneId)?.data.set('themeId', themeId);
 }

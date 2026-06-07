@@ -169,6 +169,14 @@
 				client.archiveLayout(activeId);
 				switchTo(next.id);
 			},
+			onRename: (id: string, name: string) => client.renameLayout(id, name),
+			onDelete: () => {
+				// deleteLayout re-points the active layout to a survivor; just clear the
+				// selection (the deleted layout's widgets are gone) and let the reactive
+				// read pick up the new active layout.
+				client.deleteLayout(activeId);
+				shell.clearSelection();
+			},
 			open: layoutMenuOpen,
 			onOpenChange: (open: boolean) => (layoutMenuOpen = open)
 		};
