@@ -56,3 +56,25 @@ export async function mintOverlayToken(workspaceId: string): Promise<string> {
 	if (!res.ok) throw new Error(`mint token failed: ${res.status}`);
 	return ((await res.json()) as { token: string }).token;
 }
+
+/** A minted watch link's public metadata (the secret is shown only once, at mint). */
+export interface OverlayTokenSummary {
+	id: string;
+	created_at: string;
+	revoked: boolean;
+}
+
+export async function listOverlayTokens(workspaceId: string): Promise<OverlayTokenSummary[]> {
+	const res = await fetch(`/api/workspaces/${workspaceId}/overlay-tokens`, {
+		credentials: 'include'
+	});
+	if (!res.ok) throw new Error(`list tokens failed: ${res.status}`);
+	return (await res.json()) as OverlayTokenSummary[];
+}
+
+export function revokeOverlayToken(workspaceId: string, tokenId: string): Promise<Response> {
+	return fetch(`/api/workspaces/${workspaceId}/overlay-token/${tokenId}`, {
+		method: 'DELETE',
+		credentials: 'include'
+	});
+}

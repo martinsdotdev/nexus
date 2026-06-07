@@ -11,7 +11,10 @@ import {
 	setMemberRole,
 	removeMember,
 	mintOverlayToken,
+	listOverlayTokens,
+	revokeOverlayToken,
 	type Member,
+	type OverlayTokenSummary,
 	type Role
 } from '../api/share';
 
@@ -24,6 +27,8 @@ export interface Collaboration {
 	readonly shareLive: boolean;
 	/** The minted read-only watch-link URL, or null until one is created. */
 	readonly watchLink: string | null;
+	/** The workspace's active watch links, for revoking old ones. */
+	readonly tokens: OverlayTokenSummary[];
 	/** (Re)load the member list; swallows failures, leaving the list empty. */
 	load(): Promise<void>;
 	/** Invite an email at a role; resolves to an error message, or null on success. */
@@ -31,11 +36,13 @@ export interface Collaboration {
 	setRole(userId: string, role: Role): Promise<void>;
 	remove(userId: string): Promise<void>;
 	createWatchLink(): Promise<void>;
+	revokeToken(tokenId: string): Promise<void>;
 }
 
 export function createCollaboration(workspaceId: string, selfId: string): Collaboration {
 	let members = $state<Member[]>([]);
 	let watchLink = $state<string | null>(null);
+	let tokens = $state<OverlayTokenSummary[]>([]);
 
 	const myRole = $derived<Role>(
 		members.find((member) => member.user_id === selfId)?.role ?? 'viewer'
@@ -47,6 +54,15 @@ export function createCollaboration(workspaceId: string, selfId: string): Collab
 			members = await listMembers(workspaceId);
 		} catch {
 			members = [];
+		}
+		await loadTokens();
+	}
+
+	async function loadTokens() {
+		try {
+			tokens = (await listOverlayTokens(workspaceId)).filter((token) => !token.revoked);
+		} catch {
+			tokens = [];
 		}
 	}
 
@@ -62,6 +78,9 @@ export function createCollaboration(workspaceId: string, selfId: string): Collab
 		},
 		get watchLink() {
 			return watchLink;
+		},
+		get tokens() {
+			return tokens;
 		},
 		load,
 		async invite(email, role) {
@@ -83,9 +102,14 @@ export function createCollaboration(workspaceId: string, selfId: string): Collab
 			try {
 				const token = await mintOverlayToken(workspaceId);
 				watchLink = `${location.origin}/overlay?token=${token}`;
+				await loadTokens();
 			} catch {
 				// Leave the link unset; the panel keeps offering to create one.
 			}
+		},
+		async revokeToken(tokenId) {
+			await revokeOverlayToken(workspaceId, tokenId);
+			await loadTokens();
 		}
 	};
 }

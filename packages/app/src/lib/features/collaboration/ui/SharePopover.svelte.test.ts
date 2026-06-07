@@ -16,11 +16,13 @@ function base() {
 	return {
 		members,
 		watchLink: null,
+		tokens: [],
 		onClose: noop,
 		onInvite: asyncNoop,
 		onSetRole: noop,
 		onRemove: noop,
-		onCreateWatchLink: noop
+		onCreateWatchLink: noop,
+		onRevokeToken: noop
 	};
 }
 
@@ -54,4 +56,20 @@ test('shows the watch link when one exists', async () => {
 
 	const pop = (await page.getByTestId('share-popover').element()) as HTMLElement;
 	expect(pop.textContent).toContain('http://x/overlay?token=abc');
+});
+
+test('lists active watch links and revokes one', async () => {
+	let revoked: string | null = null;
+	render(SharePopover, {
+		...base(),
+		selfId: 'u1',
+		myRole: 'owner',
+		tokens: [{ id: 'tok123456789abc', created_at: '2026-01-01T00:00:00Z', revoked: false }],
+		onRevokeToken: (id: string) => {
+			revoked = id;
+		}
+	});
+
+	await page.getByRole('button', { name: /Revoke watch link/ }).click();
+	expect(revoked).toBe('tok123456789abc');
 });

@@ -8,7 +8,7 @@ use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use axum::middleware;
 use axum::response::Json;
-use axum::routing::{get, post, put};
+use axum::routing::{delete, get, post, put};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -257,6 +257,53 @@ async fn mint_overlay_token(
     Ok(Json(MintedToken { token }))
 }
 
+#[derive(Serialize)]
+struct OverlayTokenItem {
+    id: String,
+    created_at: String,
+    revoked: bool,
+}
+
+/// `GET /workspaces/:id/overlay-tokens`: the workspace's minted watch links (owner or
+/// editor). Only ids + status; the secret is shown once at mint and never again.
+async fn list_overlay_tokens(
+    State(state): State<AppState>,
+    WorkspaceEditor { workspace }: WorkspaceEditor,
+) -> Result<Json<Vec<OverlayTokenItem>>, StatusCode> {
+    let cloud = state.cloud.as_ref().ok_or(StatusCode::NOT_FOUND)?;
+    let tokens = cloud
+        .overlay_tokens
+        .list(workspace)
+        .await
+        .map_err(internal)?;
+    Ok(Json(
+        tokens
+            .into_iter()
+            .map(|t| OverlayTokenItem {
+                id: t.id,
+                created_at: t.created_at.to_rfc3339(),
+                revoked: t.revoked_at.is_some(),
+            })
+            .collect(),
+    ))
+}
+
+/// `DELETE /workspaces/:id/overlay-token/:token`: revoke a watch link (owner or editor).
+async fn revoke_overlay_token(
+    State(state): State<AppState>,
+    WorkspaceEditor { workspace }: WorkspaceEditor,
+    Path((_, token)): Path<(Uuid, String)>,
+) -> Result<StatusCode, StatusCode> {
+    let cloud = state.cloud.as_ref().ok_or(StatusCode::NOT_FOUND)?;
+    cloud
+        .overlay_tokens
+        .revoke(workspace, &token)
+        .await
+        .map_err(internal)?
+        .ok_or(StatusCode::NOT_FOUND)?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
 fn internal<E: std::fmt::Display>(err: E) -> StatusCode {
     tracing::error!("workspace route error: {err}");
     StatusCode::INTERNAL_SERVER_ERROR
@@ -282,8 +329,16 @@ pub fn router() -> Router<AppState> {
             put(set_member_role).delete(remove_member),
         )
         .route(
+            "/api/workspaces/{id}/overlay-tokens",
+            get(list_overlay_tokens),
+        )
+        .route(
             "/api/workspaces/{id}/overlay-token",
             post(mint_overlay_token),
+        )
+        .route(
+            "/api/workspaces/{id}/overlay-token/{token}",
+            delete(revoke_overlay_token),
         )
         .layer(middleware::from_fn(csrf_guard))
 }
@@ -665,5 +720,46 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(resp.status(), StatusCode::FORBIDDEN);
+    }
+
+    #[tokio::test]
+    async fn an_owner_lists_and_revokes_overlay_tokens() {
+        let (_c, _tmp, state, pool) = cloud().await;
+        let cloud = state.cloud.clone().unwrap();
+        let owner = seed_user(&pool).await;
+        let owner_cookie = cloud.sessions.create(owner).await.unwrap().token;
+        let ws = cloud
+            .workspaces
+            .create_with_owner(owner, "W")
+            .await
+            .unwrap();
+        let token = cloud.overlay_tokens.mint(ws).await.unwrap();
+        let token_id = cloud.overlay_tokens.list(ws).await.unwrap()[0].id.clone();
+
+        // GET lists the one active token.
+        let resp = build_app(state.clone(), None)
+            .oneshot(get_req(
+                &format!("/api/workspaces/{}/overlay-tokens", ws.0),
+                &owner_cookie,
+            ))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let list = json(resp).await;
+        assert_eq!(list.as_array().unwrap().len(), 1);
+        assert_eq!(list[0]["revoked"], false);
+
+        // DELETE revokes it (same-origin); the token then fails validation.
+        let resp = build_app(state.clone(), None)
+            .oneshot(req(
+                "DELETE",
+                &format!("/api/workspaces/{}/overlay-token/{}", ws.0, token_id),
+                &owner_cookie,
+                "",
+            ))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::NO_CONTENT);
+        assert_eq!(cloud.overlay_tokens.validate(&token).await.unwrap(), None);
     }
 }

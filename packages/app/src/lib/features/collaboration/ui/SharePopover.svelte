@@ -6,7 +6,7 @@
 	// the only no-account way in, and it is read-only. The relay enforces every permission;
 	// this panel only shows the controls the caller may use.
 	import { Crown, ChevronDown, UserPlus, Link, Copy, Check, Shield, X } from 'lucide-svelte';
-	import type { Member, Role } from '../api/share';
+	import type { Member, OverlayTokenSummary, Role } from '../api/share';
 	import { peerColor } from '$lib/shared/lib/peer-color';
 	import { toast } from '$lib/shared/ui/toast';
 	import { emailError } from '$lib/shared/lib/validators';
@@ -20,23 +20,28 @@
 		myRole: Role;
 		/** The minted watch-link URL, or null until one is created. */
 		watchLink: string | null;
+		/** The workspace's active watch links, for revoking old ones. */
+		tokens: OverlayTokenSummary[];
 		onClose: () => void;
 		/** Invite an email at a role; resolves to an error message, or null on success. */
 		onInvite: (email: string, role: Role) => Promise<string | null>;
 		onSetRole: (userId: string, role: Role) => void;
 		onRemove: (userId: string) => void;
 		onCreateWatchLink: () => void;
+		onRevokeToken: (tokenId: string) => void;
 	}
 	let {
 		members,
 		selfId,
 		myRole,
 		watchLink,
+		tokens,
 		onClose,
 		onInvite,
 		onSetRole,
 		onRemove,
-		onCreateWatchLink
+		onCreateWatchLink,
+		onRevokeToken
 	}: Props = $props();
 
 	const canManage = $derived(myRole === 'owner');
@@ -198,6 +203,23 @@
 				</button>
 			{/if}
 			<p class="sub link-sub">A read-only link for OBS or viewers, no account needed.</p>
+			{#if tokens.length}
+				<ul class="tokens">
+					{#each tokens as token (token.id)}
+						<li class="token-row">
+							<Link size={12} color="var(--muted-foreground)" />
+							<span class="token-id">{token.id.slice(0, 12)}&hellip;</span>
+							<button
+								class="token-revoke"
+								aria-label={`Revoke watch link ${token.id.slice(0, 12)}`}
+								onclick={() => onRevokeToken(token.id)}
+							>
+								Revoke
+							</button>
+						</li>
+					{/each}
+				</ul>
+			{/if}
 		</div>
 	{/if}
 
@@ -507,6 +529,46 @@
 	}
 	.link-sub {
 		margin: var(--space-2) 0 0;
+	}
+
+	.tokens {
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
+		margin: var(--space-2) 0 0;
+	}
+
+	.token-row {
+		display: flex;
+		align-items: center;
+		gap: var(--space-2);
+		padding: var(--space-1) var(--space-2);
+		border-radius: var(--radius-sm);
+		background: var(--background);
+		border: 1px solid var(--border-subtle);
+	}
+
+	.token-id {
+		flex: 1;
+		min-width: 0;
+		font-family: var(--font-mono);
+		font-size: var(--text-xs);
+		color: var(--muted-foreground);
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+
+	.token-revoke {
+		flex: none;
+		font-size: var(--text-xs);
+		font-weight: 600;
+		color: var(--muted-foreground);
+		cursor: pointer;
+	}
+
+	.token-revoke:hover {
+		color: var(--destructive);
 	}
 
 	.foot {

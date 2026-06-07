@@ -414,7 +414,7 @@ mod tests {
             .unwrap();
         let token = cloud.overlay_tokens.mint(ws).await.unwrap();
         let (id, _) = crate::auth::session_token::parse_token(&token).unwrap();
-        cloud.overlay_tokens.revoke(id).await.unwrap();
+        cloud.overlay_tokens.revoke(ws, id).await.unwrap();
 
         let params = SyncParams {
             workspace: None,

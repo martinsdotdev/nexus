@@ -420,11 +420,13 @@
 		selfId={selfIdentity.id}
 		myRole={collaboration.myRole}
 		watchLink={collaboration.watchLink}
+		tokens={collaboration.tokens}
 		onClose={() => (shareOpen = false)}
 		onInvite={collaboration.invite}
 		onSetRole={collaboration.setRole}
 		onRemove={collaboration.remove}
 		onCreateWatchLink={collaboration.createWatchLink}
+		onRevokeToken={collaboration.revokeToken}
 	/>
 {/if}
 
