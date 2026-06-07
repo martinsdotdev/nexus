@@ -94,6 +94,13 @@
 	);
 	const themes = $derived(workspace?.workspace.themes ?? []);
 
+	// Other scenes in the active layout: the move-to-scene targets for a selected widget.
+	const moveTargets = $derived(
+		(workspace?.scenes ?? [])
+			.filter((scene) => scene.id !== activeSceneId)
+			.map((scene) => ({ id: scene.id, label: sceneDisplayName(scene) }))
+	);
+
 	// The titlebar avatar stack: you first (when signed in), then the live remote peers, each
 	// annotated as host when they own the workspace. This bridges presence (live cursors) with
 	// collaboration (member roles) — the page's job, since a feature may not import another.
@@ -285,6 +292,15 @@
 			onSetGeometry={(id, geom) => workspace?.setWidgetGeometry(id, geom)}
 			onSetProp={(id, key, value) => workspace?.setWidgetProp(id, key, value)}
 			onSetVisible={(id, visible) => workspace?.setWidgetVisible(id, visible)}
+			onDuplicate={(id) => {
+				const copyId = workspace?.duplicateWidget(id);
+				if (copyId) shell.selectWidget(copyId);
+			}}
+			onMoveToScene={(id, sceneId) => {
+				workspace?.moveWidgetToScene(id, sceneId);
+				shell.clearSelection();
+			}}
+			{moveTargets}
 			onSetSceneTheme={(sceneId, themeId) => workspace?.setSceneTheme(sceneId, themeId)}
 			onSetSceneOverride={(sceneId, key, value) => workspace?.setSceneOverride(sceneId, key, value)}
 			onCustomizeTheme={() => shell.openThemeEditor()}

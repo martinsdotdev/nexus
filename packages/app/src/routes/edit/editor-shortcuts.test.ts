@@ -10,6 +10,7 @@ function setup(selectedWidgetId: string | null = null, mode: 'live' | 'draft' = 
 	const shell: ShortcutShell = {
 		togglePalette: vi.fn(),
 		clearSelection: vi.fn(),
+		selectWidget: vi.fn(),
 		selectedWidgetId
 	};
 	const workspace: ShortcutWorkspace = {
@@ -17,6 +18,7 @@ function setup(selectedWidgetId: string | null = null, mode: 'live' | 'draft' = 
 		undo: vi.fn(),
 		redo: vi.fn(),
 		deleteWidget: vi.fn(),
+		duplicateWidget: vi.fn(),
 		setWidgetGeometry: vi.fn(),
 		activate: vi.fn(),
 		mode,
@@ -72,6 +74,14 @@ test('Delete removes the selected widget and clears selection', () => {
 	handle(key({ key: 'Delete' }));
 	expect(workspace.deleteWidget).toHaveBeenCalledWith('w1');
 	expect(shell.clearSelection).toHaveBeenCalled();
+});
+
+test('Ctrl+D duplicates the selected widget and selects the copy', () => {
+	const { workspace, shell, handle } = setup('w1');
+	vi.mocked(workspace.duplicateWidget).mockReturnValue('w2');
+	handle(key({ key: 'd', ctrlKey: true }));
+	expect(workspace.duplicateWidget).toHaveBeenCalledWith('w1');
+	expect(shell.selectWidget).toHaveBeenCalledWith('w2');
 });
 
 test('an arrow nudges the selected widget from its current position', () => {

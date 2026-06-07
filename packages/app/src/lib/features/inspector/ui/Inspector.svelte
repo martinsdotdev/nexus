@@ -18,6 +18,10 @@
 		) => void;
 		onSetProp: (id: string, key: string, value: unknown) => void;
 		onSetVisible: (id: string, visible: boolean) => void;
+		onDuplicate: (id: string) => void;
+		onMoveToScene: (id: string, sceneId: string) => void;
+		/** The other scenes in the active layout this widget can be moved to. */
+		moveTargets: { id: string; label: string }[];
 		onSetSceneTheme: (sceneId: string, themeId: string) => void;
 		onSetSceneOverride: (sceneId: string, key: string, value: string) => void;
 		onCustomizeTheme?: () => void;
@@ -29,6 +33,9 @@
 		onSetGeometry,
 		onSetProp,
 		onSetVisible,
+		onDuplicate,
+		onMoveToScene,
+		moveTargets,
 		onSetSceneTheme,
 		onSetSceneOverride,
 		onCustomizeTheme
@@ -70,6 +77,24 @@
 		</fieldset>
 
 		<Switch checked={w.visible} onChange={(v) => onSetVisible(w.id, v)} label="Visible" />
+
+		<div class="actions">
+			<button type="button" class="action" onclick={() => onDuplicate(w.id)}>Duplicate</button>
+			{#if moveTargets.length}
+				<label class="field">
+					<span>Move to scene</span>
+					<Select
+						ariaLabel="Move to scene"
+						value=""
+						options={[
+							{ value: '', label: 'Choose scene…' },
+							...moveTargets.map((target) => ({ value: target.id, label: target.label }))
+						]}
+						onChange={(value) => value && onMoveToScene(w.id, value)}
+					/>
+				</label>
+			{/if}
+		</div>
 
 		{#if fields.length}
 			<fieldset class="group">
@@ -214,6 +239,24 @@
 	}
 
 	.customize {
+		align-self: flex-start;
+		font: inherit;
+		font-size: var(--text-xs);
+		padding: var(--space-1) var(--space-2);
+		border-radius: var(--radius-md);
+		border: var(--stroke-thin) solid var(--border);
+		background: var(--secondary);
+		color: var(--secondary-foreground);
+		cursor: pointer;
+	}
+
+	.actions {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-2);
+	}
+
+	.action {
 		align-self: flex-start;
 		font: inherit;
 		font-size: var(--text-xs);

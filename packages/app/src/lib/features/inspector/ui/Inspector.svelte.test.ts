@@ -11,6 +11,9 @@ const themes: Theme[] = [
 	{ id: 'cyber', name: 'Cyber', base: '', protected: true, tokens: {} }
 ];
 
+// The move-to-scene targets (the active layout's other scenes).
+const moveTargets = [{ id: 's2', label: 'BRB' }];
+
 const widget = (): WidgetView => ({
 	id: 'w1',
 	widgetType: 'stream-info',
@@ -37,6 +40,8 @@ const handlers = () => ({
 	onSetGeometry: vi.fn(),
 	onSetProp: vi.fn(),
 	onSetVisible: vi.fn(),
+	onDuplicate: vi.fn(),
+	onMoveToScene: vi.fn(),
 	onSetSceneTheme: vi.fn(),
 	onSetSceneOverride: vi.fn()
 });
@@ -49,7 +54,7 @@ async function input(name: string) {
 
 test('editing a text prop reports the new value', async () => {
 	const h = handlers();
-	render(Inspector, { widget: widget(), scene: null, themes, ...h });
+	render(Inspector, { widget: widget(), scene: null, themes, moveTargets, ...h });
 	const el = await input('Title');
 	el.value = 'New Title';
 	el.dispatchEvent(new Event('input', { bubbles: true }));
@@ -58,7 +63,7 @@ test('editing a text prop reports the new value', async () => {
 
 test('editing X reports the geometry change', async () => {
 	const h = handlers();
-	render(Inspector, { widget: widget(), scene: null, themes, ...h });
+	render(Inspector, { widget: widget(), scene: null, themes, moveTargets, ...h });
 	// Ark NumberInput (role spinbutton) owns its value; type into it via fill.
 	await page.getByRole('spinbutton', { name: 'X' }).fill('100');
 	expect(h.onSetGeometry).toHaveBeenCalledWith('w1', { x: 100 });
@@ -66,15 +71,31 @@ test('editing X reports the geometry change', async () => {
 
 test('toggling visibility reports it', async () => {
 	const h = handlers();
-	render(Inspector, { widget: widget(), scene: null, themes, ...h });
+	render(Inspector, { widget: widget(), scene: null, themes, moveTargets, ...h });
 	// Ark Switch: the checkbox is sr-only; click the visible label/track to toggle.
 	await page.getByText('Visible').click();
 	expect(h.onSetVisible).toHaveBeenCalledWith('w1', false);
 });
 
+test('Duplicate reports the widget id', async () => {
+	const h = handlers();
+	render(Inspector, { widget: widget(), scene: null, themes, moveTargets, ...h });
+	await page.getByRole('button', { name: 'Duplicate' }).click();
+	expect(h.onDuplicate).toHaveBeenCalledWith('w1');
+});
+
+test('choosing a move-to-scene target reports the move', async () => {
+	const h = handlers();
+	render(Inspector, { widget: widget(), scene: null, themes, moveTargets, ...h });
+	// Ark Select: open the listbox from the combobox trigger, then pick the scene.
+	await page.getByRole('combobox', { name: 'Move to scene' }).click();
+	await page.getByRole('option', { name: 'BRB' }).click();
+	expect(h.onMoveToScene).toHaveBeenCalledWith('w1', 's2');
+});
+
 test('with no widget, changing the scene theme reports it', async () => {
 	const h = handlers();
-	render(Inspector, { widget: null, scene: scene(), themes, ...h });
+	render(Inspector, { widget: null, scene: scene(), themes, moveTargets, ...h });
 	// Ark Select: open the listbox from the combobox trigger, then pick an option.
 	await page.getByRole('combobox', { name: 'Theme' }).click();
 	await page.getByRole('option', { name: 'Cyber' }).click();

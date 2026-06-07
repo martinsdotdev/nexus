@@ -56,6 +56,7 @@ export interface WorkspaceClient {
 	): string | undefined;
 	deleteWidget(id: string): void;
 	moveWidgetToScene(id: string, sceneId: string): void;
+	duplicateWidget(id: string): string | undefined;
 	setSceneTheme(sceneId: string, themeId: string): void;
 	setSceneOverride(sceneId: string, key: string, value: string): void;
 	/** Add a freeform scene to the active layout; returns its id. */
@@ -223,6 +224,9 @@ export function createWorkspaceClient(
 		},
 		moveWidgetToScene(id, sceneId) {
 			tx((doc) => mutate.moveWidgetToScene(doc, id, sceneId));
+		},
+		duplicateWidget(id) {
+			return tx((doc) => mutate.duplicateWidget(doc, id));
 		},
 		setSceneTheme(sceneId, themeId) {
 			tx((doc) => mutate.setSceneTheme(doc, sceneId, themeId));

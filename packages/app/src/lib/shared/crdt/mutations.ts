@@ -81,6 +81,21 @@ export function moveWidgetToScene(doc: LoroDoc, id: string, sceneId: string): vo
 	doc.getTree(TREE).move(id as TreeID, sceneId as TreeID);
 }
 
+/** Duplicate a widget into its own scene, offset a little so the copy is visible
+ *  rather than sitting exactly on the original; returns the new widget id. */
+export function duplicateWidget(doc: LoroDoc, id: string): string | undefined {
+	const source = nodeById(doc, id);
+	const scene = source?.parent();
+	if (!source || !scene) return undefined;
+	const node = scene.createNode();
+	copyMeta(source, node);
+	const x = source.data.get('x');
+	const y = source.data.get('y');
+	if (typeof x === 'number') node.data.set('x', x + 20);
+	if (typeof y === 'number') node.data.set('y', y + 20);
+	return String(node.id);
+}
+
 // --- Layouts (each is a tree root holding scenes -> widgets) ------------------
 // A layout is a root node of the tree; the active one is named by the workspace
 // map's `activeLayoutId`. Clients may create layouts freely: Loro TreeIDs are

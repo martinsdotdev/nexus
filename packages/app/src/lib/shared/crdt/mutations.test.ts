@@ -11,6 +11,7 @@ import {
 	deleteWidget,
 	duplicateLayout,
 	duplicateScene,
+	duplicateWidget,
 	moveWidgetToScene,
 	renameScene,
 	reorderScene,
@@ -189,6 +190,30 @@ describe('widget mutations', () => {
 		doc.commit();
 		expect(sceneByKind(doc, 'live').widgets).toHaveLength(0);
 		expect(sceneByKind(doc, 'brb').widgets).toHaveLength(1);
+	});
+
+	test('duplicateWidget copies a widget into the same scene, offset', () => {
+		const { doc, scenes } = buildFixture();
+		const id = createWidget(
+			doc,
+			scenes.live,
+			'goal-bar',
+			{ x: 100, y: 50, w: 200, h: 60, z: 3 },
+			{ label: 'G' }
+		)!;
+		doc.commit();
+
+		const copyId = duplicateWidget(doc, id)!;
+		doc.commit();
+
+		const live = sceneByKind(doc, 'live');
+		expect(live.widgets).toHaveLength(2);
+		const copy = live.widgets.find((w) => w.id === copyId)!;
+		expect(copy.widgetType).toBe('goal-bar');
+		expect(copy.props.label).toBe('G');
+		expect(copy.x).toBe(120); // offset by +20
+		expect(copy.y).toBe(70);
+		expect(copy.id).not.toBe(id);
 	});
 });
 

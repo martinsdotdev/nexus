@@ -9,6 +9,7 @@
 export interface ShortcutShell {
 	togglePalette(): void;
 	clearSelection(): void;
+	selectWidget(id: string): void;
 	readonly selectedWidgetId: string | null;
 }
 
@@ -18,6 +19,7 @@ export interface ShortcutWorkspace {
 	undo(): void;
 	redo(): void;
 	deleteWidget(id: string): void;
+	duplicateWidget(id: string): string | undefined;
 	setWidgetGeometry(id: string, geom: { x: number; y: number }): void;
 	activate(sceneId: string): void;
 	readonly mode: 'live' | 'draft';
@@ -80,6 +82,15 @@ export function createEditorShortcuts(
 		}
 
 		const selected = shell.selectedWidgetId;
+		if (mod && event.key.toLowerCase() === 'd') {
+			// Ctrl/Cmd-D: duplicate the selected widget and select the copy.
+			event.preventDefault();
+			if (selected) {
+				const copy = workspace.duplicateWidget(selected);
+				if (copy) shell.selectWidget(copy);
+			}
+			return;
+		}
 		if ((event.key === 'Delete' || event.key === 'Backspace') && selected) {
 			event.preventDefault();
 			workspace.deleteWidget(selected);
