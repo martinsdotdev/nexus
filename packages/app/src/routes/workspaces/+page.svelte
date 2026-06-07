@@ -142,7 +142,10 @@
 <main class="picker">
 	<section class="card">
 		<header class="head">
-			<span class="mark">{m['app.name']()}</span>
+			<div class="head-top">
+				<span class="mark">{m['app.name']()}</span>
+				<a class="account-link" href={resolve('/account')}>{m['workspaces.account']()}</a>
+			</div>
 			<h1 class="title">{m['workspaces.title']()}</h1>
 		</header>
 
@@ -289,11 +292,27 @@
 		margin-bottom: var(--space-5);
 	}
 
+	.head-top {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+	}
+
 	.mark {
 		font-weight: 700;
 		font-size: var(--text-sm);
 		letter-spacing: 0.02em;
 		color: var(--muted-foreground);
+	}
+
+	.account-link {
+		font-size: var(--text-xs);
+		color: var(--muted-foreground);
+		text-decoration: none;
+	}
+
+	.account-link:hover {
+		color: var(--foreground);
 	}
 
 	.title {

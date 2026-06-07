@@ -6,11 +6,11 @@
 //! the cookie is only read and cleared.
 
 use axum::Router;
-use axum::extract::{FromRequestParts, Request, State};
-use axum::http::{StatusCode, request::Parts};
+use axum::extract::{FromRequestParts, Path, Request, State};
+use axum::http::{HeaderMap, StatusCode, request::Parts};
 use axum::middleware::{self, Next};
 use axum::response::{Json, Response};
-use axum::routing::{get, post};
+use axum::routing::{delete, get, post};
 use axum_extra::extract::CookieJar;
 use axum_extra::extract::cookie::{Cookie, SameSite};
 use serde::{Deserialize, Serialize};
@@ -107,6 +107,97 @@ async fn logout(State(state): State<AppState>, jar: CookieJar) -> (CookieJar, St
     (cleared, StatusCode::NO_CONTENT)
 }
 
+#[derive(Serialize)]
+struct SessionItem {
+    id: String,
+    user_agent: Option<String>,
+    ip: Option<String>,
+    created_at: String,
+    last_used_at: String,
+    /// Whether this is the session making the request (the one not to revoke).
+    current: bool,
+}
+
+/// `GET /auth/sessions`: the caller's active sessions, marking the one making this request,
+/// so the account page can show where the account is signed in.
+async fn list_sessions(
+    State(state): State<AppState>,
+    CurrentUser(user): CurrentUser,
+    jar: CookieJar,
+) -> Result<Json<Vec<SessionItem>>, StatusCode> {
+    let cloud = state.cloud.as_ref().ok_or(StatusCode::UNAUTHORIZED)?;
+    let current = current_session_id(&jar);
+    let sessions = cloud
+        .sessions
+        .list_for_user(user.id)
+        .await
+        .map_err(internal)?;
+    Ok(Json(
+        sessions
+            .into_iter()
+            .map(|s| SessionItem {
+                current: current.as_deref() == Some(s.id.as_str()),
+                id: s.id,
+                user_agent: s.user_agent,
+                ip: s.ip,
+                created_at: s.created_at.to_rfc3339(),
+                last_used_at: s.last_used_at.to_rfc3339(),
+            })
+            .collect(),
+    ))
+}
+
+/// `DELETE /auth/sessions/:id`: revoke one of the caller's sessions (self only; another
+/// account's session id is a 404).
+async fn revoke_session(
+    State(state): State<AppState>,
+    CurrentUser(user): CurrentUser,
+    Path(id): Path<String>,
+) -> Result<StatusCode, StatusCode> {
+    let cloud = state.cloud.as_ref().ok_or(StatusCode::UNAUTHORIZED)?;
+    cloud
+        .sessions
+        .invalidate_for_user(user.id, &id)
+        .await
+        .map_err(internal)?
+        .ok_or(StatusCode::NOT_FOUND)?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+/// `POST /auth/sessions/logout-others`: revoke every session but the one making the request.
+async fn logout_others(
+    State(state): State<AppState>,
+    CurrentUser(user): CurrentUser,
+    jar: CookieJar,
+) -> Result<StatusCode, StatusCode> {
+    let cloud = state.cloud.as_ref().ok_or(StatusCode::UNAUTHORIZED)?;
+    let current = current_session_id(&jar).ok_or(StatusCode::BAD_REQUEST)?;
+    cloud
+        .sessions
+        .invalidate_others(user.id, &current)
+        .await
+        .map_err(internal)?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+/// The public id of the session making this request, parsed from the cookie.
+fn current_session_id(jar: &CookieJar) -> Option<String> {
+    let cookie = jar.get(COOKIE_NAME)?;
+    session_token::parse_token(cookie.value()).map(|(id, _)| id.to_string())
+}
+
+/// The device hints (user agent + client IP) for a sign-in, read from the request headers.
+/// The IP is the first hop of the proxy's `X-Forwarded-For` (Railway sets it); absent in a
+/// direct/local request, which is fine, it just shows no IP.
+fn device_hints(headers: &HeaderMap) -> (Option<String>, Option<String>) {
+    let header = |name: &str| headers.get(name).and_then(|v| v.to_str().ok());
+    let user_agent = header("user-agent").map(str::to_string);
+    let ip = header("x-forwarded-for")
+        .and_then(|xff| xff.split(',').next())
+        .map(|first| first.trim().to_string());
+    (user_agent, ip)
+}
+
 #[derive(Deserialize)]
 struct EmailRequest {
     email: String,
@@ -152,6 +243,7 @@ async fn post_email(
 async fn post_email_verify(
     State(state): State<AppState>,
     jar: CookieJar,
+    headers: HeaderMap,
     Json(body): Json<VerifyRequest>,
 ) -> Result<(CookieJar, StatusCode), StatusCode> {
     let cloud = state.cloud.as_ref().ok_or(StatusCode::NOT_FOUND)?;
@@ -164,7 +256,12 @@ async fn post_email_verify(
         .map_err(internal)?
     {
         VerifyOutcome::Verified(user_id) => {
-            let session = cloud.sessions.create(user_id).await.map_err(internal)?;
+            let (user_agent, ip) = device_hints(&headers);
+            let session = cloud
+                .sessions
+                .create_with_device(user_id, user_agent.as_deref(), ip.as_deref())
+                .await
+                .map_err(internal)?;
             // First sign-in claims the bootstrapped workspace (ADR-0009 R5). Best-effort:
             // a failure must not block login, so it is logged and ignored (the workspace
             // simply stays unclaimed for the next sign-in).
@@ -243,6 +340,9 @@ pub fn router() -> Router<AppState> {
     Router::new()
         .route("/auth/me", get(me))
         .route("/auth/logout", post(logout))
+        .route("/auth/sessions", get(list_sessions))
+        .route("/auth/sessions/logout-others", post(logout_others))
+        .route("/auth/sessions/{id}", delete(revoke_session))
         .route("/auth/email", post(post_email))
         .route("/auth/email/verify", post(post_email_verify))
         .layer(middleware::from_fn(csrf_guard))
@@ -509,5 +609,67 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(resp.status(), StatusCode::FORBIDDEN);
+    }
+
+    #[tokio::test]
+    async fn sessions_can_be_listed_and_revoked() {
+        let (_c, _tmp, state, pool, _mail) = cloud_app().await;
+        let store = state.cloud.clone().unwrap().sessions;
+        let user = Uuid::new_v4();
+        sqlx::query("insert into app_user (id) values ($1)")
+            .bind(user)
+            .execute(&pool)
+            .await
+            .unwrap();
+        let current = store.create(user).await.unwrap();
+        let other = store.create(user).await.unwrap();
+        let cookie = format!("{COOKIE_NAME}={}", current.token);
+
+        // GET /auth/sessions -> 200.
+        let resp = build_app(state.clone(), None)
+            .oneshot(
+                HttpRequest::builder()
+                    .uri("/auth/sessions")
+                    .header("cookie", &cookie)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+
+        // DELETE one session by id (same-origin) -> 204, and it stops validating.
+        let resp = build_app(state.clone(), None)
+            .oneshot(
+                HttpRequest::builder()
+                    .method("DELETE")
+                    .uri(format!("/auth/sessions/{}", other.id))
+                    .header("cookie", &cookie)
+                    .header("sec-fetch-site", "same-origin")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::NO_CONTENT);
+        assert!(store.validate(&other.token).await.unwrap().is_none());
+
+        // logout-others revokes every other session but keeps the current one.
+        let extra = store.create(user).await.unwrap();
+        let resp = build_app(state.clone(), None)
+            .oneshot(
+                HttpRequest::builder()
+                    .method("POST")
+                    .uri("/auth/sessions/logout-others")
+                    .header("cookie", &cookie)
+                    .header("sec-fetch-site", "same-origin")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::NO_CONTENT);
+        assert!(store.validate(&extra.token).await.unwrap().is_none());
+        assert!(store.validate(&current.token).await.unwrap().is_some());
     }
 }
