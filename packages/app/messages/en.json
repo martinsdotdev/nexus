@@ -26,6 +26,7 @@
 	"editor.command.open_layout": "Open layout",
 	"editor.command.use_in_obs": "Use in OBS",
 	"editor.command.fire_test_alert": "Fire test alert",
+	"editor.command.add_scene": "Add scene",
 	"editor.canvas.dimensions": "1920 x 1080",
 	"login.title": "Sign in to Nexus",
 	"login.email_label": "Email",

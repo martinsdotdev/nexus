@@ -70,10 +70,16 @@
 			collaboration = null;
 		};
 	});
+	// A scene shows its name; an un-renamed seeded scene (its name still equals its kind)
+	// shows the localized kind label instead, so the four defaults stay translated while
+	// renamed and freeform ('custom'-kind) scenes show the name the streamer chose.
+	function sceneDisplayName(scene: { kind: string; name: string }): string {
+		return scene.name === scene.kind ? (sceneLabels[scene.kind]?.() ?? scene.name) : scene.name;
+	}
 	const sceneCards = $derived(
 		(workspace?.scenes ?? []).map((scene) => ({
 			id: scene.id,
-			label: sceneLabels[scene.kind]?.() ?? scene.kind
+			label: sceneDisplayName(scene)
 		}))
 	);
 	const activeSceneId = $derived(workspace?.activeSceneId ?? '');
@@ -171,6 +177,7 @@
 	// The command palette's commands; runCommand dispatches by id.
 	const commands: CommandItem[] = [
 		{ id: 'add-widget', label: m['editor.command.add_widget']() },
+		{ id: 'add-scene', label: m['editor.command.add_scene']() },
 		{ id: 'switch-theme', label: m['editor.command.switch_theme']() },
 		{ id: 'toggle-mode', label: m['editor.command.toggle_mode'](), hint: 'Ctrl L' },
 		{ id: 'open-layout', label: m['editor.command.open_layout'](), hint: 'Ctrl O' },
@@ -199,8 +206,15 @@
 		if (id) shell.selectWidget(id);
 	}
 
+	// Add a fresh freeform scene to the active layout and switch to it.
+	function addScene() {
+		const id = workspace?.createScene(`Scene ${(workspace?.scenes.length ?? 0) + 1}`);
+		if (id) workspace?.activate(id);
+	}
+
 	function runCommand(id: string) {
 		if (id === 'add-widget') addWidget('stream-info');
+		else if (id === 'add-scene') addScene();
 		else if (id === 'switch-theme') shell.openThemeEditor();
 		else if (id === 'fire-test-alert') editorBus.emit(testEventAt(testEventIndex++, Date.now()));
 		else if (id === 'open-layout') layoutMenuOpen = true;
@@ -325,7 +339,23 @@
 		</StudioPanel>
 	</div>
 
-	<SceneStrip scenes={sceneCards} {activeSceneId} onSelect={(id) => workspace?.activate(id)} />
+	<SceneStrip
+		scenes={sceneCards}
+		{activeSceneId}
+		onSelect={(id) => workspace?.activate(id)}
+		onAdd={addScene}
+		onRename={(id, name) => workspace?.renameScene(id, name)}
+		onDuplicate={(id) => {
+			const source = workspace?.scenes.find((scene) => scene.id === id);
+			const copyId = workspace?.duplicateScene(
+				id,
+				source ? `${sceneDisplayName(source)} copy` : 'Scene copy'
+			);
+			if (copyId) workspace?.activate(copyId);
+		}}
+		onDelete={(id) => workspace?.deleteScene(id)}
+		onReorder={(id, index) => workspace?.reorderScene(id, index)}
+	/>
 </div>
 
 <!-- Off-canvas drawers live OUTSIDE .shell so the inert binding above never disables
